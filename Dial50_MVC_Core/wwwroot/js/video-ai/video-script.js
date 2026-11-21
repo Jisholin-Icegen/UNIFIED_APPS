@@ -987,7 +987,22 @@ registerProcessor("mic-processor", MicProcessor);
 
     // =========================================================
 
+    // The Home page owns the AI call. A second call (own socket + own microphone) started
+    // from a page inside the Home iframe would fight it for the same bed and mic.
+    function homeOwnsVoiceCall() {
+        try {
+            var homeHost = window.parent !== window ? window.parent.UnifiedAIHost : null;
+            return !!(homeHost && typeof homeHost.isRealCallActive === 'function' && homeHost.isRealCallActive());
+        } catch (e) { return false; }
+    }
+
     async function connectToAvatarBackend() {
+
+        if (homeOwnsVoiceCall()) {
+            console.warn('[VideoAI] Home AI call is live; not starting a second call here.');
+            try { if (typeof window.setState === 'function') window.setState('idle'); } catch (e) { }
+            return;
+        }
 
         // A second start while one is running would overwrite audioContext / mediaStream
 

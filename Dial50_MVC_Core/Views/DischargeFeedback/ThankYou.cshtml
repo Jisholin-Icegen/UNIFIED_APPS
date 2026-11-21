@@ -199,6 +199,9 @@
     window.goHome = goHome;
 </script>
 
-<script src="~/js/voice-agent/config.js"></script>
-<script src="~/js/voice-agent/script.js"></script>
+@if (Context.Request.Query["UnifiedAI"] != "1" && Context.Request.Query["Unified"] != "1")
+{
+    <script src="~/js/voice-agent/config.js"></script>
+    <script src="~/js/voice-agent/script.js"></script>
+}
 <script src="~/js/layout_DailyCare.js"></script>

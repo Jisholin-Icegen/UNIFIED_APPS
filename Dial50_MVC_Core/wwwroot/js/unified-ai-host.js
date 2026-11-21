@@ -34,7 +34,12 @@
     let activeTarget = null;
     let latestFrameContext = null;
     let lastSentContext = "";
+    let lastContextSentAt = 0;
+    let contextRetryTimer = null;
+    let lastContextRoute = "";
+    const CONTEXT_MIN_GAP_MS = 2500;   // never send app_context more often than this
     let simulatedSession = false;
+    let voiceNavSession = false;
     let screenWakeLock = null;
     let wakeLockRequestPending = false;
     let suppressReturnClickUntil = 0;
@@ -45,7 +50,7 @@
 
     function isCallActive() {
         const state = document.body.getAttribute("data-state");
-        return simulatedSession || state === "connecting" || state === "connected";
+        return simulatedSession || voiceNavSession || state === "connecting" || state === "connected";
     }
 
     function isRealCallActive() {
@@ -243,8 +248,24 @@
         if (!context) return;
         const signature = JSON.stringify(context);
         if (signature === lastSentContext) return;
+        // Rate limit: the clock, call countdown, badges etc. change the DOM constantly.
+        // Send the LATEST context once the gap has passed instead of one message per change.
+        // A NEW page must reach the AI at once; only repeat updates of the same page are rate limited.
+        const routeChanged = String(context.route || "") !== lastContextRoute;
+        const wait = routeChanged ? 0 : CONTEXT_MIN_GAP_MS - (Date.now() - lastContextSentAt);
+        if (wait > 0) {
+            if (!contextRetryTimer) {
+                contextRetryTimer = setTimeout(function () {
+                    contextRetryTimer = null;
+                    sendCurrentPageContext();
+                }, wait);
+            }
+            return;
+        }
         if (window.sendVoiceAgentMessage({ type: "app_context", context: context })) {
             lastSentContext = signature;
+            lastContextSentAt = Date.now();
+            lastContextRoute = String(context.route || "");
         }
     }
 
@@ -279,7 +300,7 @@
     function updateFloatingBar() {
         const state = document.body.getAttribute("data-state");
         const realCall = state === "connecting" || state === "connected";
-        const activeCall = simulatedSession || realCall;
+        const activeCall = simulatedSession || voiceNavSession || realCall;
         syncScreenWakeLock(realCall);
         if (!activeCall) lastSentContext = "";
         if (floatingBar) {
@@ -290,6 +311,8 @@
             if (statusText) {
                 statusText.textContent = simulatedSession
                     ? "Test simulation"
+                    : voiceNavSession
+                    ? "Voice navigation"
                     : callStatus && callStatus.textContent.trim()
                     || (state === "connecting" ? "Connecting..." : "Listening...");
             }
@@ -300,7 +323,7 @@
                     ? '<i class="fa-solid fa-microphone-slash" aria-hidden="true"></i>'
                     : '<i class="fa-solid fa-microphone" aria-hidden="true"></i>';
                 barMicButton.setAttribute("aria-label", muted ? "Unmute microphone" : "Mute microphone");
-                barMicButton.disabled = simulatedSession || state !== "connected";
+                barMicButton.disabled = simulatedSession || voiceNavSession || state !== "connected";
             }
         }
         if (state === "connected" && !simulatedSession) sendCurrentPageContext();
@@ -589,6 +612,13 @@
     function sendActionToFrame(action) {
         if (!frame.contentWindow || !frameReady) {
             pendingActions.push(action);
+            // never leave the AI waiting forever for a page that did not finish loading
+            setTimeout(function () {
+                const index = pendingActions.indexOf(action);
+                if (index === -1) return;
+                pendingActions.splice(index, 1);
+                reportResult(action, false, null, "The page did not finish loading in time.");
+            }, 10000);
             return;
         }
 
@@ -756,7 +786,7 @@
     });
     window.addEventListener("voice-agent:connection-state", function (event) {
         const detail = event.detail || {};
-        if (!detail.connected) lastSentContext = "";
+        if (!detail.connected) { lastSentContext = ""; lastContextRoute = ""; }
         updateFloatingBar();
         if (detail.connected) sendCurrentPageContext();
     });
@@ -789,6 +819,10 @@
                 notifyTestContextChanged();
                 return;
             }
+            if (voiceNavSession) {
+                endVoiceNavSession();
+                return;
+            }
             if (typeof window.endChat === "function") window.endChat();
             updateFloatingBar();
         });
@@ -803,7 +837,7 @@
         barMicButton.addEventListener("click", function (event) {
             event.stopPropagation();
             const micButton = document.getElementById("micBtn");
-            if (!simulatedSession && isCallActive() && micButton) micButton.click();
+            if (!simulatedSession && !voiceNavSession && isCallActive() && micButton) micButton.click();
             updateFloatingBar();
         });
     }
@@ -867,10 +901,12 @@
         if (!relevantChanges) return;
         if (homeContextTimer) clearTimeout(homeContextTimer);
         homeContextTimer = setTimeout(function () {
-            lastSentContext = "";
+            // Do NOT clear lastSentContext here. The signature check is what stops an
+            // unchanged page (clock tick, countdown, badge) from re-sending the full
+            // context to the voice server over and over, which could drop the call.
             sendCurrentPageContext();
             notifyTestContextChanged();
-        }, 250);
+        }, 700);
     });
     homeContextObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
 
@@ -907,7 +943,66 @@
         loadFrameUrl(targetUrl, routeTargetForPath(targetUrl.pathname), null);
     }, true);
 
+    // ---- Voice navigation session (no AI): keeps the Home shell alive so pages open in the iframe ----
+    function endVoiceNavSession() {
+        if (!voiceNavSession) return false;
+        voiceNavSession = false;
+        showChat();
+        updateFloatingBar();
+        notifyTestContextChanged();
+        window.dispatchEvent(new CustomEvent("unified-ai:voice-nav-ended"));
+        return true;
+    }
+
+    // ---- Notification tap while Home is open: route inside the shell, never reload Home ----
+    if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.addEventListener("message", function (event) {
+            const data = event.data || {};
+            if (data.type !== "push-open" || !data.url) return;
+            if (isCallActive()) {
+                if (!openAppUrl(data.url)) console.warn("Notification target is not a valid same-site route:", data.url);
+            } else {
+                window.location.href = data.url;
+            }
+        });
+    }
+
+    // ---- A live call must never be unloaded by a top-level navigation ----
+    // A script doing location.href = "/SomePage" on the Home shell would drop the call, the microphone
+    // and the WebSocket. While a call is live, open that page inside the shell instead.
+    if (window.navigation && typeof window.navigation.addEventListener === "function") {
+        window.navigation.addEventListener("navigate", function (event) {
+            if (!isRealCallActive() || !event.cancelable || event.hashChange || event.formData) return;
+            if (event.downloadRequest !== null && event.downloadRequest !== undefined) return;
+            if (event.navigationType !== "push" && event.navigationType !== "replace") return;
+            if (event.destination.sameDocument) return;
+            let destination;
+            try { destination = new URL(event.destination.url); } catch (error) { return; }
+            if (destination.origin !== window.location.origin) return;
+            if (/\/(?:log-?out|log-?in|prelanding)\b/i.test(destination.pathname)) return;   // leaving the app on purpose
+            if (openAppUrl(destination.toString())) event.preventDefault();
+        });
+    }
+
+    // Refresh / closing the tab would end the call: ask first.
+    window.addEventListener("beforeunload", function (event) {
+        if (!isRealCallActive()) return;
+        event.preventDefault();
+        event.returnValue = "";
+    });
+
     window.UnifiedAIHost = {
+        startVoiceNavSession: function () {
+            if (isRealCallActive() || simulatedSession) return false;
+            voiceNavSession = true;
+            updateFloatingBar();
+            notifyTestContextChanged();
+            return true;
+        },
+        endVoiceNavSession: endVoiceNavSession,
+        isVoiceNavActive: function () { return voiceNavSession; },
+        isRealCallActive: isRealCallActive,
+        isCallActive: isCallActive,
         openModule: openModule,
         showChat: showChat,
         minimizeCall: minimizeCall,
@@ -940,6 +1035,7 @@
         const state = document.body.getAttribute("data-state");
         if (state === "connecting" || state === "connected") {
             simulatedSession = false;
+            if (voiceNavSession) endVoiceNavSession();
             clearTimeout(endedStateTimer);
             endedStateTimer = null;
         } else {

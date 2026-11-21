@@ -20,6 +20,7 @@ wwwroot\css\responsive.css
 wwwroot\css\Room.css
 wwwroot\css\site.css
 wwwroot\css\Tracking.css
+wwwroot\css\unified-ai.css
 wwwroot\css\voice-agent\styles.css
 wwwroot\data\region-language.json
 wwwroot\Default.png
@@ -384,6 +385,10 @@ wwwroot\js\push-client.js
 wwwroot\js\Room.js
 wwwroot\js\site.js
 wwwroot\js\Tracking.js
+wwwroot\js\unified-ai-frame.js
+wwwroot\js\unified-ai-host.js
+wwwroot\js\unified-ai-test.js
+wwwroot\js\unified-voice-nav.js
 wwwroot\js\video-ai\config.js
 wwwroot\js\video-ai\video-script.js
 wwwroot\js\voice-agent\config.example.js

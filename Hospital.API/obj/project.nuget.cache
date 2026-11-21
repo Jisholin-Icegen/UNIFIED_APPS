@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "6RW4rSyEM9Q=",
+  "dgSpecHash": "Z8Rw8PB1h7A=",
   "success": true,
-  "projectFilePath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Hospital.API\\Hospital.API.csproj",
+  "projectFilePath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Hospital.API\\Hospital.API.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Icege\\.nuget\\packages\\microsoft.aspnetcore.authentication.jwtbearer\\8.0.24\\microsoft.aspnetcore.authentication.jwtbearer.8.0.24.nupkg.sha512",
     "C:\\Users\\Icege\\.nuget\\packages\\microsoft.extensions.apidescription.server\\6.0.5\\microsoft.extensions.apidescription.server.6.0.5.nupkg.sha512",

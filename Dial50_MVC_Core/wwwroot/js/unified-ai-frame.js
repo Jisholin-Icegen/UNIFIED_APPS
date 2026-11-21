@@ -1,6 +1,19 @@
 (function () {
     const params = new URLSearchParams(window.location.search);
-    if (window.parent === window || (params.get("UnifiedAI") !== "1" && params.get("Unified") !== "1")) return;
+    let underHome = false;
+    try { underHome = window.parent !== window && !!window.parent.UnifiedAIHost; } catch (error) { underHome = false; }
+    if (window.parent === window || (!underHome && params.get("UnifiedAI") !== "1" && params.get("Unified") !== "1")) return;
+
+    // The server flags every iframe page as Unified even if the URL lost ?UnifiedAI=1 (script
+    // navigation / redirect). Put it back in the address so client-side checks keep working.
+    if (params.get("UnifiedAI") !== "1") {
+        try {
+            const fixedUrl = new URL(window.location.href);
+            fixedUrl.searchParams.set("Unified", "1");
+            fixedUrl.searchParams.set("UnifiedAI", "1");
+            window.history.replaceState(window.history.state, "", fixedUrl.toString());
+        } catch (error) { /* ignore */ }
+    }
 
     function respond(action, success, result, error) {
         if (!action || !action.request_id) return;
@@ -149,7 +162,21 @@
         return redactPatientIdentifiers(label).slice(0, 180);
     }
 
+    // Ids describe WHAT a control is (label + target), not WHERE it sits in the list, so an id the
+    // AI received a moment ago still points at the same control after the page changes.
+    function stableId(prefix, element, label, used) {
+        const key = [element.tagName, String(label || ""),
+            element.getAttribute("href") || element.getAttribute("data-route") || element.getAttribute("data-action")
+            || element.id || element.getAttribute("name") || ""].join("|").toLowerCase();
+        let hash = 5381;
+        for (let i = 0; i < key.length; i++) hash = ((hash << 5) + hash + key.charCodeAt(i)) | 0;
+        const base = prefix + (hash >>> 0).toString(36);
+        used[base] = (used[base] || 0) + 1;
+        return used[base] > 1 ? base + "-" + used[base] : base;
+    }
+
     function pageContext() {
+        const usedIds = {};
         const controls = Array.from(document.querySelectorAll("select"))
             .filter(isVisible)
             .filter(isSafeControl)
@@ -179,7 +206,7 @@
                 .slice(0, 50)
                 .map(function (field, index) {
                     const labels = Array.from(field.labels || []).map(function (label) { return label.textContent; });
-                    const targetId = "unified-field-" + index;
+                    const targetId = stableId("unified-field-", field, field.getAttribute("aria-label") || labels.join(" ") || field.getAttribute("placeholder") || field.name || field.id || "", usedIds);
                     if (field.getAttribute("data-unified-ai-field") !== targetId) {
                         field.setAttribute("data-unified-ai-field", targetId);
                     }
@@ -201,7 +228,7 @@
                         .find(function (label) { return choice.id && label.htmlFor === choice.id; });
                 const target = isVisible(choice) ? choice : labelElement && isVisible(labelElement) ? labelElement : null;
                 if (!target || !isSafeField(choice)) return null;
-                const targetId = "unified-choice-" + index;
+                const targetId = stableId("unified-choice-", choice, normalizeText(labelElement && labelElement.textContent || choice.getAttribute("aria-label") || choice.value || "") + "|" + (choice.name || "") + "|" + (choice.value || ""), usedIds);
                 if (target.getAttribute("data-unified-ai-choice") !== targetId) {
                     target.setAttribute("data-unified-ai-choice", targetId);
                 }
@@ -287,7 +314,7 @@
                 const route = safeRoute(element);
                 const action = element.getAttribute("data-action");
                 if (!label) return null;
-                const targetId = "unified-action-" + index;
+                const targetId = stableId("unified-action-", element, label, usedIds);
                 if (element.getAttribute("data-unified-ai-target") !== targetId) {
                     element.setAttribute("data-unified-ai-target", targetId);
                 }
@@ -391,42 +418,72 @@
         });
     }
 
+    // Voice actions can arrive while a page is still loading or re-rendering. Instead of failing
+    // at once, look again for up to 3 s, and fall back to the visible label when the id is gone.
+    function findByLabel(attribute, label) {
+        if (attribute !== "data-unified-ai-target") return null;
+        const wanted = normalizeText(label).toLowerCase();
+        if (!wanted) return null;
+        const matches = Array.from(document.querySelectorAll("[" + attribute + "]")).filter(function (element) {
+            return isVisible(element) && normalizeText(interactiveLabel(element)).toLowerCase() === wanted;
+        });
+        return matches.length === 1 ? matches[0] : null;   // never guess between several
+    }
+
+    function resolveTarget(attribute, action, callback) {
+        const deadline = Date.now() + 3000;
+        (function attempt() {
+            pageContext();   // re-tag controls so ids reflect the page as it is right now
+            const target = findUiTarget(attribute, action.targetId) || findByLabel(attribute, action.label);
+            if (target) { callback(target); return; }
+            if (Date.now() < deadline) { window.setTimeout(attempt, 150); return; }
+            callback(null);
+        })();
+    }
+
     function executeVisibleUIAction(action) {
         if (action.action === "ui.click") {
-            const target = findUiTarget("data-unified-ai-target", action.targetId);
-            if (!target || isDisabled(target)) {
-                respond(action, false, null, "The selected visible action is no longer available.");
-                return;
-            }
-            target.scrollIntoView({ behavior: "smooth", block: "center" });
-            window.setTimeout(function () {
-                target.click();
-                sendPageContext();
-                respond(action, true, { clicked: interactiveLabel(target) });
-            }, 25);
+            resolveTarget("data-unified-ai-target", action, function (target) {
+                if (!target || isDisabled(target)) {
+                    respond(action, false, null, "The selected visible action is no longer available.");
+                    return;
+                }
+                target.scrollIntoView({ behavior: "smooth", block: "center" });
+                window.setTimeout(function () {
+                    target.click();
+                    sendPageContext();
+                    respond(action, true, { clicked: interactiveLabel(target) });
+                }, 25);
+            });
             return;
         }
 
         if (action.action === "ui.fill") {
-            const target = findUiTarget("data-unified-ai-field", action.targetId);
-            if (!target || target.disabled || target.readOnly) {
-                respond(action, false, null, "The selected visible field is no longer available.");
-                return;
-            }
-            const value = String(action.value == null ? "" : action.value).slice(0, 2000);
-            target.scrollIntoView({ behavior: "smooth", block: "center" });
-            target.focus({ preventScroll: true });
-            if (target.isContentEditable) target.textContent = value;
-            else target.value = value;
-            target.dispatchEvent(new Event("input", { bubbles: true }));
-            target.dispatchEvent(new Event("change", { bubbles: true }));
-            schedulePageContext();
-            respond(action, true, { field: action.label || target.getAttribute("aria-label") || target.name || target.id });
+            resolveTarget("data-unified-ai-field", action, function (target) {
+                if (!target || target.disabled || target.readOnly) {
+                    respond(action, false, null, "The selected visible field is no longer available.");
+                    return;
+                }
+                const value = String(action.value == null ? "" : action.value).slice(0, 2000);
+                target.scrollIntoView({ behavior: "smooth", block: "center" });
+                target.focus({ preventScroll: true });
+                if (target.isContentEditable) target.textContent = value;
+                else target.value = value;
+                target.dispatchEvent(new Event("input", { bubbles: true }));
+                target.dispatchEvent(new Event("change", { bubbles: true }));
+                schedulePageContext();
+                respond(action, true, { field: action.label || target.getAttribute("aria-label") || target.name || target.id });
+            });
         }
     }
 
     function setVisibleChoice(action) {
-        const target = findUiTarget("data-unified-ai-choice", action.targetId);
+        resolveTarget("data-unified-ai-choice", action, function (target) {
+            applyVisibleChoice(action, target);
+        });
+    }
+
+    function applyVisibleChoice(action, target) {
         if (!target || isDisabled(target)) {
             respond(action, false, null, "The selected visible choice is no longer available.");
             return;

@@ -104,6 +104,25 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseRequestLocalization(app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>().Value);
 
+// Unified AI: a page that loads INSIDE the Home iframe must always behave as a Unified child page,
+// even when a script navigation or a redirect dropped ?UnifiedAI=1 from the URL. Without the flag
+// the page sends no context to the AI and cannot run voice actions. Browsers label such requests
+// with "Sec-Fetch-Dest: iframe", so we put the flag back before the views read the query string.
+app.Use(async (context, next) =>
+{
+    if (string.Equals(context.Request.Headers["Sec-Fetch-Dest"].ToString(), "iframe", StringComparison.OrdinalIgnoreCase)
+        && context.Request.Query["UnifiedAI"] != "1"
+        && context.Request.Query["Unified"] != "1")
+    {
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(context.Request.QueryString.Value);
+        query["Unified"] = "1";
+        query["UnifiedAI"] = "1";
+        context.Request.QueryString = QueryString.Create(query);
+    }
+
+    await next();
+});
+
 app.UseRouting();
 app.UseSession();
 app.UseAuthentication();

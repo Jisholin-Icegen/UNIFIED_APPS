@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Hospital.API\\Hospital.API.csproj": {}
+    "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Hospital.API\\Hospital.API.csproj": {}
   },
   "projects": {
-    "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Hospital.API\\Hospital.API.csproj": {
+    "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Hospital.API\\Hospital.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Hospital.API\\Hospital.API.csproj",
+        "projectUniqueName": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Hospital.API\\Hospital.API.csproj",
         "projectName": "Hospital.API",
-        "projectPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Hospital.API\\Hospital.API.csproj",
+        "projectPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Hospital.API\\Hospital.API.csproj",
         "packagesPath": "C:\\Users\\Icege\\.nuget\\packages\\",
-        "outputPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Hospital.API\\obj\\",
+        "outputPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Hospital.API\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

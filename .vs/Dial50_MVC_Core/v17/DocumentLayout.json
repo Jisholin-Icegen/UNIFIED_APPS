@@ -1,10 +1,10 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "D:\\PROJECT\\BELLANUS \u0026 GURUGRAM\\GIT CODES\\MULTITENANT-QR\\",
+  "WorkspaceRootPath": "D:\\PROJECT\\BELLANUS \u0026 GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\bellanus \u0026 gurugram\\git codes\\multitenant-qr\\dial50_mvc_core\\services\\ifoodservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\services\\ifoodservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\bellanus \u0026 gurugram\\git codes\\new unified\\unified_qr_fixed\\dial50_mvc_core\\wwwroot\\js\\dailycare.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\dailycare.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     }
   ],
   "DocumentGroupContainers": [
@@ -27,14 +27,14 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "IFoodService.cs",
-              "DocumentMoniker": "D:\\PROJECT\\BELLANUS \u0026 GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Dial50_MVC_Core\\Services\\IFoodService.cs",
-              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Services\\IFoodService.cs",
-              "ToolTip": "D:\\PROJECT\\BELLANUS \u0026 GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Dial50_MVC_Core\\Services\\IFoodService.cs",
-              "RelativeToolTip": "Dial50_MVC_Core\\Services\\IFoodService.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-11-19T09:00:52.073Z",
+              "Title": "Dailycare.js",
+              "DocumentMoniker": "D:\\PROJECT\\BELLANUS \u0026 GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "ToolTip": "D:\\PROJECT\\BELLANUS \u0026 GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAA1AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-20T12:08:34.721Z",
               "EditorCaption": ""
             }
           ]

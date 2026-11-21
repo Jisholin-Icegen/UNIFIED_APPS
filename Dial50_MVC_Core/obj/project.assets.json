@@ -3466,11 +3466,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Dial50_MVC_Core\\Dial50_MVC_Core.csproj",
+      "projectUniqueName": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Dial50_MVC_Core\\Dial50_MVC_Core.csproj",
       "projectName": "Dial50_MVC_Core",
-      "projectPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Dial50_MVC_Core\\Dial50_MVC_Core.csproj",
+      "projectPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Dial50_MVC_Core\\Dial50_MVC_Core.csproj",
       "packagesPath": "C:\\Users\\Icege\\.nuget\\packages\\",
-      "outputPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Dial50_MVC_Core\\obj\\",
+      "outputPath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Dial50_MVC_Core\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

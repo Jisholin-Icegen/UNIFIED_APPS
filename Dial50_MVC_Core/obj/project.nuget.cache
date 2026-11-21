@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "AbtGhQzd600=",
+  "dgSpecHash": "Y73dblUkNXM=",
   "success": true,
-  "projectFilePath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\MULTITENANT-QR\\Dial50_MVC_Core\\Dial50_MVC_Core.csproj",
+  "projectFilePath": "D:\\PROJECT\\BELLANUS & GURUGRAM\\GIT CODES\\NEW UNIFIED\\UNIFIED_QR_FIXED\\Dial50_MVC_Core\\Dial50_MVC_Core.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Icege\\.nuget\\packages\\humanizer.core\\2.14.1\\humanizer.core.2.14.1.nupkg.sha512",
     "C:\\Users\\Icege\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\6.0.0\\microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
