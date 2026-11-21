@@ -2810,8 +2810,24 @@ public partial class Index_Service_Service : System.Web.UI.Page
         string Id = string.IsNullOrEmpty(Request.QueryString["ID"]) ? "0" : AESEncrytDecry.DecryptStringAES(Request.QueryString["ID"]);
         string CountryId = string.IsNullOrEmpty(Request.QueryString["COUNTRYID"]) ? "0" : AESEncrytDecry.DecryptStringAES(Request.QueryString["COUNTRYID"]);
         string Calories = string.IsNullOrEmpty(Request.QueryString["CALORIES"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["CALORIES"]);
+        string Price = string.IsNullOrEmpty(Request.QueryString["PRICE"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["PRICE"]);
+        string DietaryType = string.IsNullOrEmpty(Request.QueryString["DIETARYTYPE"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["DIETARYTYPE"]);
+        string Day = string.IsNullOrEmpty(Request.QueryString["DAY"]) ? "0" : AESEncrytDecry.DecryptStringAES(Request.QueryString["DAY"]);
+        string Protein = string.IsNullOrEmpty(Request.QueryString["PROTEIN"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["PROTEIN"]);
+        string Carbs = string.IsNullOrEmpty(Request.QueryString["CARBS"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["CARBS"]);
+        string TotalFat = string.IsNullOrEmpty(Request.QueryString["TOTALFAT"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["TOTALFAT"]);
+        string Sodium = string.IsNullOrEmpty(Request.QueryString["SODIUM"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["SODIUM"]);
+        string Sugar = string.IsNullOrEmpty(Request.QueryString["SUGAR"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["SUGAR"]);
+        string Ingredients = string.IsNullOrEmpty(Request.QueryString["INGREDIENTS"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["INGREDIENTS"]);
+        string Vendor = string.IsNullOrEmpty(Request.QueryString["VENDOR"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["VENDOR"]);
+        string HISID = string.IsNullOrEmpty(Request.QueryString["HISID"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["HISID"]);
 
-        DataTable dt = DataAccess.InsertUpdateMenuItem(FoodName, Category, Description, ServingCode, AllowedDietType, Allergens, Tags, ImagePath, IsActive, Action, IsDefaultOrder, Id, CountryId, Calories);
+        DataTable dt = DataAccess.InsertUpdateMenuItem(
+            FoodName, Category, Description, ServingCode, AllowedDietType, Allergens, Tags,
+            ImagePath, IsActive, Action, IsDefaultOrder, Id, CountryId, Calories,
+            Price, DietaryType, Day, Protein, Carbs, TotalFat, Sodium, Sugar, Ingredients, Vendor, HISID
+        );
+
         ds.Tables.Add(dt);
         return ds;
     }

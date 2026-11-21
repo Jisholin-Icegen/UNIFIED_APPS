@@ -57,69 +57,10 @@
                 LoadCategories();
 
 
-                $('.meal-chip input[type="checkbox"]').each(function () {
-                    if ($(this).is(':checked')) {
-                        $(this).closest('.meal-chip').addClass('checked');
-                    }
-                });
-                function toggleBtnState(inputId, btnId) {
-                    $(inputId).on('input', function () {
-                        if ($(this).val().trim().length > 0) {
-                            $(btnId).addClass('active-text');
-                        } else {
-                            $(btnId).removeClass('active-text');
-                        }
-                    });
-                }
-
-                toggleBtnState('#txtAllergen', '#btnAddAllergen');
-                toggleBtnState('#txtTag', '#btnAddTag');
-
-                $('#btnAddAllergen').click(function () {
-                    let val = $('#txtAllergen').val().trim();
-                    if (val !== "") {
-                        let pill = `<div class="pill pill-allergen">${val} <span class="remove-pill">&times;</span></div>`;
-                        $('#allergenContainer').append(pill);
-                        $('#txtAllergen').val('').trigger('input');
-                    }
-                });
-                $(document).on("click", ".category-btn", function () {
-                    $(".category-btn").removeClass("active");
-                    $(this).addClass("active");
-                    var servingcode = $(this).attr("data-value");
-                    $("#HFServingCode").val(servingcode);
-                    LoadMenuTypes();
-                });
-
-                $('#btnAddTag').click(function () {
-                    let val = $('#txtTag').val().trim();
-                    if (val !== "") {
-                        let pill = `<div class="pill pill-tag">${val} <span class="remove-pill">&times;</span></div>`;
-                        $('#tagContainer').append(pill);
-                        $('#txtTag').val('').trigger('input');
-                    }
-                });
-
-                $(document).on('click', '.remove-pill', function () {
-                    $(this).parent('.pill').remove();
-                });
-
-                $('.menu-input').keypress(function (e) {
-                    if (e.which == 13) {
-                        $(this).next('button').click();
-                    }
-                });
-                $('#dietList').on('change', 'input[type="checkbox"]', function () {
-                    $(this).closest('.diet-item').toggleClass('selected-diet', this.checked);
-                });
-                $('#dietList').on('click', '.diet-item', function (e) {
-                    if (!$(e.target).is('input[type="checkbox"]')) {
-                        var $checkbox = $(this).find('input[type="checkbox"]');
-                        $checkbox.prop('checked', !$checkbox.prop('checked')).trigger('change');
-                    }
-                });
+                initModalSelects();
+                $('.menu-input').on('keypress', function (e) { if (e.which == 13) e.preventDefault(); });
                 var userName = sessionStorage.getItem('NAME') || '';
-                var userRole = sessionStorage.getItem('ROLENAME') || '';
+                var userRole = GetUserRoleName();
                 var roleId = parseInt(sessionStorage.getItem("ROLE")) || 0;
                 if (roleId === 14) {
                     $("#foodOrderContainer").show();
@@ -170,6 +111,8 @@
         <asp:HiddenField ID="hfUserId" runat="server" ClientIDMode="Static" />
         <asp:HiddenField ID="HFServingCode" runat="server" ClientIDMode="Static" />
         <asp:HiddenField ID="HFDWSearchQuery" runat="server" ClientIDMode="Static" />
+        <asp:HiddenField ID="hdnDeleteMenuId" runat="server" ClientIDMode="Static" />
+        
         <style>
             @keyframes tutorialBlink {
                 0%, 100% {
@@ -182,6 +125,8 @@
                     transform: scale(1.25);
                 }
             }
+            
+            /* modal styles live in ../css/MenuMaster.css */
         </style>
 
         <div id="tutorialPopup"
@@ -560,7 +505,6 @@
                                 </div>
                             </div>
                             <button type="button" class="btn-add-menu" onclick="OpenNewMenuItem();">
-                                <input type="hidden" id="hdnMenuId" value="" />
                                 <span class="plus-icon">+</span>
                                 Add Menu Item
                             </button>
@@ -668,115 +612,195 @@
                         </div>
                     </div>
 
-                    <div class="modal fade" id="menuItemModal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-lg menu-modal-dialog">
-                            <div class="modal-content menu-modal">
+                    <!-- Menu item modal : single modal, two panels (left = big, right = compact) -->
+                    <div class="modal fade" id="menuItemBasicModal" tabindex="-1" aria-hidden="true">
+                        <input type="hidden" id="hdnMenuId" value="" />
+                        <div class="modal-dialog menu-modal-dialog">
+                            <div class="modal-content">
+                                <div class="menu-split">
 
-                                <div class="modal-header">
-                                    <div>
-                                        <h5 class="menu-modal-title" id="MenuTypeHeader">New menu item</h5>
-                                        <p class="menu-modal-subtitle">Items are surfaced to patients filtered by their active diet plan.</p>
-                                    </div>
-                                    <button type="button" class="menu-close-btn" data-bs-dismiss="modal">×</button>
-                                </div>
-
-                                <div class="modal-body">
-
-                                    <div class="row">
-                                        <div class="col-md-7">
-                                            <label>Name</label>
-                                            <input type="text" id="txtMenuName" class="form-control menu-input" placeholder="e.g. Avocado Toast" />
-                                            <span id="errMenuName" class="validation-error">Name is required</span>
-                                        </div>
-
-                                        <div class="col-md-5">
-                                            <label>Calories (kcal)</label>
-                                            <input type="number" id="txtCalories" class="form-control menu-input" placeholder="e.g. 250" min="0" />
-                                        </div>
-
-                                    </div>
-
-                                    <div class="form-group mt-3">
-                                        <label>Description</label>
-                                        <textarea id="txtDescription" class="form-control menu-textarea" placeholder="Short description shown to patients & kitchen..."></textarea>
-                                    </div>
-
-                                    <div class="form-group mt-3">
-                                        <label>Available Serving Timings</label>
-                                        <div id="servingTimingList" class="serving-checkbox-list">
-                                        </div>
-                                    </div>
-                                    <div class="row mt-3">
-                                        <div class="col-md-6">
-                                            <label>Country</label>
-                                            <select id="ddlModalCountry" class="form-control">
-                                            </select>
-                                        </div>
-                                    </div>
-                                    <div class="form-group mt-3">
-                                        <label>Allowed diet types</label>
-
-                                        <div class="small-text">
-                                            Pick all diets this item is medically appropriate for.
-                                        </div>
-
-                                        <div id="dietList" class="diet-checkbox-container" style="max-height: 200px; overflow-y: auto;">
-                                        </div>
-
-                                        <span id="errDietType" class="validation-error">Pick at least one diet</span>
-                                    </div>
-
-                                    <div class="row mt-3">
-
-                                        <div class="col-md-6">
-                                            <label>Allergens</label>
-                                            <div class="input-with-btn">
-                                                <input type="text" id="txtAllergen" class="form-control menu-input" placeholder="e.g. peanuts" />
-                                                <button type="button" id="btnAddAllergen" class="btn-small">Add</button>
+                                    <!-- ============ LEFT PANEL (big) ============ -->
+                                    <div class="panel-left">
+                                        <div class="menu-card">
+                                            <div class="card-head">
+                                                <div>
+                                                    <h5 class="menu-modal-title" id="BasicModalHeader">New menu item</h5>
+                                                    <p class="menu-modal-subtitle">Enter the menu item details, nutrition and status.</p>
+                                                </div>
+                                                <button type="button" class="menu-close-btn" data-bs-dismiss="modal">×</button>
                                             </div>
-                                            <div id="allergenContainer" class="tag-list-container"></div>
-                                        </div>
+                                            <div class="card-body-scroll">
+                                                <div class="row g-3">
+                                                    <!-- column A -->
+                                                    <div class="col-lg-6">
+                                                        <div class="form-section">
+                                                            <h6 class="section-title">Basic Information</h6>
+                                                            <div class="row g-2">
+                                                                <div class="col-8">
+                                                                    <label>Name <span class="required">*</span></label>
+                                                                    <input type="text" id="txtMenuName" class="form-control menu-input" placeholder="e.g. Avocado Toast" />
+                                                                    <span id="errMenuName" class="validation-error">Name is required</span>
+                                                                </div>
+                                                                <div class="col-4">
+                                                                    <label>Calories</label>
+                                                                    <input type="number" id="txtCalories" class="form-control menu-input" placeholder="105" min="0" />
+                                                                </div>
+                                                                <div class="col-12">
+                                                                    <label>Description</label>
+                                                                    <textarea id="txtDescription" class="form-control menu-textarea" rows="2" placeholder="Short description shown to patients & kitchen..."></textarea>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label>Country</label>
+                                                                    <select id="ddlModalCountry" class="form-control"></select>
+                                                                </div>
+                                                                <div class="col-6">
+                                                                    <label>Dietary Type</label>
+                                                                    <select id="ddlDietaryType" class="form-control">
+                                                                        <option value="">Select Type</option>
+                                                                        <option value="VEG">Vegetarian</option>
+                                                                        <option value="NONVEG">Non-Vegetarian</option>
+                                                                        <option value="VEGAN">Vegan</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div class="col-4">
+                                                                    <label>Price ($)</label>
+                                                                    <input type="number" id="txtPrice" class="form-control menu-input" placeholder="1.00" step="0.01" min="0" />
+                                                                </div>
+                                                                <div class="col-4">
+                                                                    <label>HIS ID</label>
+                                                                    <input type="text" id="txtHISID" class="form-control menu-input" placeholder="HIS ID" />
+                                                                </div>
+                                                                <div class="col-4">
+                                                                    <label>Vendor</label>
+                                                                    <input type="text" id="txtVendor" class="form-control menu-input" placeholder="Vendor" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                        <div class="col-md-6">
-                                            <label>Tags</label>
-                                            <div class="input-with-btn">
-                                                <input type="text" id="txtTag" class="form-control menu-input" placeholder="e.g. high-protein" />
-                                                <button type="button" id="btnAddTag" class="btn-small">Add</button>
+                                                    <!-- column B -->
+                                                    <div class="col-lg-6">
+                                                        <div class="form-section">
+                                                            <h6 class="section-title">Nutritional Information</h6>
+                                                            <div class="nutri-grid">
+                                                                <div><label>Protein (g)</label><input type="number" id="txtProtein" class="form-control menu-input" placeholder="3.4" step="0.1" min="0" /></div>
+                                                                <div><label>Carbs (g)</label><input type="number" id="txtCarbs" class="form-control menu-input" placeholder="19.8" step="0.1" min="0" /></div>
+                                                                <div><label>Fat (g)</label><input type="number" id="txtTotalFat" class="form-control menu-input" placeholder="1.6" step="0.1" min="0" /></div>
+                                                                <div><label>Sodium (mg)</label><input type="number" id="txtSodium" class="form-control menu-input" placeholder="135" step="1" min="0" /></div>
+                                                                <div><label>Sugar (g)</label><input type="number" id="txtSugar" class="form-control menu-input" placeholder="0.4" step="0.1" min="0" /></div>
+                                                            </div>
+                                                            <label class="mt-2">Ingredients</label>
+                                                            <textarea id="txtIngredients" class="form-control menu-textarea" rows="2" placeholder="e.g., low-fat milk, whole wheat bread, avocado..."></textarea>
+                                                        </div>
+
+                                                        <div class="form-section">
+                                                            <h6 class="section-title">Image & Status</h6>
+                                                            <label>Image URL (optional)</label>
+                                                            <input type="text" id="txtImageUrl" class="form-control menu-input" placeholder="https://..." />
+                                                            <div class="active-box mt-2">
+                                                                <div>
+                                                                    <div class="active-title">Active</div>
+                                                                    <div class="active-desc">Inactive items are hidden from order screens.</div>
+                                                                </div>
+                                                                <label class="switch">
+                                                                    <input type="checkbox" id="chkActive" checked />
+                                                                    <span class="slider"></span>
+                                                                </label>
+                                                            </div>
+                                                            <label class="checkbox-label mt-2">
+                                                                <input type="checkbox" id="chkDefaultOrder" />
+                                                                <span class="checkmark"></span>
+                                                                Default Order Item
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div id="tagContainer" class="tag-list-container"></div>
                                         </div>
-
-
                                     </div>
 
-                                    <div class="form-group mt-3">
-                                        <label>Image URL (optional)</label>
-                                        <input type="text" id="txtImageUrl" class="form-control menu-input" placeholder="https://..." />
-                                    </div>
+                                    <!-- ============ RIGHT PANEL (compact) ============ -->
+                                    <div class="panel-right">
+                                        <div class="menu-card">
+                                            <div class="card-body-scroll">
+                                                <div class="form-section">
+                                                    <h6 class="section-title">Classification</h6>
+                                                    <div class="row g-2">
+                                                        <div class="col-7">
+                                                            <label>Category</label>
+                                                            <input type="text" id="ddlCategory" class="form-control menu-input" placeholder="e.g. Main Course" />
+                                                        </div>
+                                                        <div class="col-5">
+                                                            <label>Day</label>
+                                                            <select id="ddlDay" class="form-control">
+                                                                <option value="0">All Days</option>
+                                                                <option value="1">Monday</option>
+                                                                <option value="2">Tuesday</option>
+                                                                <option value="3">Wednesday</option>
+                                                                <option value="4">Thursday</option>
+                                                                <option value="5">Friday</option>
+                                                                <option value="6">Saturday</option>
+                                                                <option value="7">Sunday</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <label class="mt-2">Available Serving Timings</label>
+                                                    <div id="servingTimingList" class="serving-checkbox-list"></div>
+                                                </div>
 
-                                    <div class="active-box">
-                                        <div>
-                                            <div class="active-title">Active</div>
-                                            <div class="active-desc">Inactive items are hidden from order screens by default.</div>
+                                                <div class="form-section">
+                                                    <h6 class="section-title">Allowed Diet Types <span class="required">*</span></h6>
+                                                    <select id="ddlAllowedDietTypes" class="form-control" multiple></select>
+                                                    <span id="errDietType" class="validation-error">Pick at least one diet</span>
+                                                </div>
+
+                                                <div class="form-section mb-0">
+                                                    <div class="row g-2">
+                                                        <div class="col-6">
+                                                            <h6 class="section-title">Allergens</h6>
+                                                            <select id="ddlAllergens" class="form-control" multiple>
+                                                                <option value="dairy">Dairy</option>
+                                                                <option value="gluten">Gluten</option>
+                                                                <option value="nuts">Nuts</option>
+                                                                <option value="peanuts">Peanuts</option>
+                                                                <option value="soy">Soy</option>
+                                                                <option value="eggs">Eggs</option>
+                                                                <option value="fish">Fish</option>
+                                                                <option value="shellfish">Shellfish</option>
+                                                                <option value="sesame">Sesame</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <h6 class="section-title">Food Tags</h6>
+                                                            <select id="ddlFoodTags" class="form-control" multiple>
+                                                                <option value="high-protein">High Protein</option>
+                                                                <option value="low-carb">Low Carb</option>
+                                                                <option value="low-fat">Low Fat</option>
+                                                                <option value="high-fiber">High Fiber</option>
+                                                                <option value="gluten-free">Gluten Free</option>
+                                                                <option value="dairy-free">Dairy Free</option>
+                                                                <option value="sugar-free">Sugar Free</option>
+                                                                <option value="organic">Organic</option>
+                                                                <option value="halal">Halal</option>
+                                                                <option value="kosher">Kosher</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        <label class="switch">
-                                            <input type="checkbox" id="chkActive" checked />
-                                            <span class="slider"></span>
-                                        </label>
-
+                                        <div class="menu-card menu-card-footer">
+                                            <button type="button" class="btn-cancel" data-bs-dismiss="modal">✕&nbsp; Cancel</button>
+                                            <button type="button" id="btnCreateMenu" class="btn-create" onclick="CreateMenuItem();">Save menu item</button>
+                                        </div>
                                     </div>
 
                                 </div>
-
-                                <div class="modal-footer">
-                                    <button type="button" class="btn-cancel" data-bs-dismiss="modal">Cancel</button>
-                                    <button type="button" id="btnCreateMenu" class="btn-create" onclick="CreateMenuItem();">Create menu item</button>
-                                </div>
-
                             </div>
                         </div>
                     </div>
+
                     <div class="modal fade" id="deleteMenuModal" tabindex="-1">
                         <div class="modal-dialog modal-dialog-centered delete-modal-dialog">
                             <div class="modal-content delete-modal-content">
@@ -794,7 +818,7 @@
 
                                     <div class="delete-footer">
                                         <button type="button" class="btn-delete-cancel" data-bs-dismiss="modal">Cancel </button>
-                                        <button type="button" class="btn-delete-confirm" onclick="CreateMenuItem('DELETE');">Deactivate</button>
+                                        <button type="button" class="btn-delete-confirm" onclick="ConfirmDeleteMenu();">Deactivate</button>
                                     </div>
 
                                 </div>
@@ -974,5 +998,3 @@
     </form>
 </body>
 </html>
-
-

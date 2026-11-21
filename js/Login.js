@@ -139,7 +139,29 @@ function callCheckUser(userPlain, pwdPlain, hospitalCode) {
         success: function (data) {
             if (data[0].RESULT !== 'FALSE') {
                 sessionStorage.setItem('HOSPITAL', hospitalCode);
-                smoothRedirect('Index/Index.aspx');
+
+                var resultStr = data[0].RESULT;
+
+                var parts = resultStr.split('_');
+
+                var userId = parts[0];            
+                var userName = parts[1];          
+                var roleId = parts[3];            
+                var roleName = parts[5];          
+                var redirectUrl = parts[parts.length - 1]; 
+
+                sessionStorage.setItem('ID', userId);
+                sessionStorage.setItem('NAME', userName);
+                sessionStorage.setItem('ROLE', roleId);
+                sessionStorage.setItem('ROLENAME', roleName);
+                sessionStorage.setItem('LURL', redirectUrl);
+
+                if (redirectUrl && redirectUrl.indexOf('.aspx') > -1) {
+                    smoothRedirect(redirectUrl);
+                } else {
+                    HideModalPopUp('ModalLoading');
+                    RaiseInvalid("Login successful, but no landing page was provided.");
+                }
             } else {
                 RaiseInvalid();
             }

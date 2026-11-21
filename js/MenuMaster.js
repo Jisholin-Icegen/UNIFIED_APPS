@@ -1,18 +1,97 @@
-﻿$(document).on("change", ".meal-chip input[type='checkbox']", function () {
+﻿/* =====================================================================
+   MenuMaster.js
+   Section 1 : Menu master (grid, filters, single 2-panel add/edit modal)
+   ===================================================================== */
 
+var COUNTRY_MAP = {};                     // lower-case country name -> id (used by Excel import)
+var MODAL_ID = 'menuItemBasicModal';      // the one and only add/edit modal
+var MULTI_SELECTS = ['ddlAllowedDietTypes', 'ddlAllergens', 'ddlFoodTags'];
+
+/* ---------- small helpers ---------- */
+function getMulti(id) {
+    return $('#' + id).val() || [];
+}
+
+function setMulti(id, arr) {
+    var $s = $('#' + id);
+    $s.val(arr || []);
+    var el = $s[0];
+    if (el && el.sumo) el.sumo.reload();
+}
+
+function initModalSelects() {
+    $.each(MULTI_SELECTS, function (i, id) {
+        var el = document.getElementById(id);
+        if (el && !el.sumo) {
+            $(el).SumoSelect({ csvDispCount: 3, search: true, searchText: 'Search...', placeholder: 'Select...', forceCustomRendering: true });
+        }
+    });
+}
+
+function toNum(id) {
+    return ($('#' + id).val() || '').toString().trim();
+}
+
+function isBadNumber(v) {
+    return v !== '' && (isNaN(v) || parseFloat(v) < 0);
+}
+
+/* Role label shown in the top-right profile chip.
+   Login pages store it under different keys, so try all common ones. */
+var ROLE_NAME_BY_ID = {};   // optional: e.g. { 14: 'Dietitian' }
+
+function GetUserRoleName() {
+    var keys = ['ROLENAME', 'ROLE_NAME', 'RoleName', 'ROLEDESC', 'USERROLE', 'USERTYPE', 'UTYPE', 'ROLETYPE'];
+    var stores = [window.sessionStorage, window.localStorage];
+    var i, j, v;
+    for (i = 0; i < stores.length; i++) {
+        for (j = 0; j < keys.length; j++) {
+            try { v = stores[i].getItem(keys[j]); } catch (e) { v = null; }
+            if (v && v.toString().trim() !== '' && isNaN(v)) return v.toString().trim();
+        }
+    }
+    // last resort: any storage key that contains "ROLE" and holds a text value
+    for (i = 0; i < stores.length; i++) {
+        try {
+            for (j = 0; j < stores[i].length; j++) {
+                var k = stores[i].key(j);
+                if (/ROLE/i.test(k)) {
+                    v = stores[i].getItem(k);
+                    if (v && isNaN(v)) return v.toString().trim();
+                }
+            }
+        } catch (e) { }
+    }
+    var id = parseInt(sessionStorage.getItem('ROLE'));
+    return ROLE_NAME_BY_ID[id] || '';
+}
+
+/* Build the encrypted service URL for INSERT / UPDATE / DELETE */
+function buildMenuUrl(fields, action, id) {
+    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("INSERTUPDATEMENUITEM"));
+    $.each(fields || {}, function (k, v) {
+        url += "&" + k + "=" + encodeURIComponent(Encrypt(String(v == null ? '' : v)));
+    });
+    url += "&ACTION=" + encodeURIComponent(Encrypt(action)) +
+        "&ID=" + encodeURIComponent(Encrypt(String(id == null ? '' : id)));
+    return url;
+}
+
+/* ---------- misc old handlers ---------- */
+$(document).on("change", ".meal-chip input[type='checkbox']", function () {
     if ($(this).is(":checked")) {
         $(".meal-chip input[type='checkbox']").not(this).prop("checked", false).closest(".meal-chip").removeClass("checked");
         $(this).closest(".meal-chip").addClass("checked");
-    }
-    else {
+    } else {
         $(this).closest(".meal-chip").removeClass("checked");
     }
-
 });
 
 $(document).on("change", "input[name='MealType']", function () {
     if ($(this).is(":checked")) { $("input[name='MealType']").not(this).prop("checked", false); }
 });
+
+/* ---------- dropdown loaders ---------- */
 function LoadDietTypeDropdown() {
     var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETDIETTYPEDROPDOWN"));
 
@@ -21,29 +100,20 @@ function LoadDietTypeDropdown() {
         type: "GET",
         dataType: "json",
         success: function (res) {
-            $("#ddlDietType").empty();
-            $("#ddlDietType").append('<option value="">All Diet Types</option>');
-            $.each(res, function (i, item) {
-                $("#ddlDietType").append('<option value="' + item.CODE + '">' + item.CODE + ' · ' + item.NAME + '</option>');
+            var filterHtml = '<option value="">All Diet Types</option>';
+            var modalHtml = '';
+            $.each(res || [], function (i, item) {
+                var label = item.CODE + ' · ' + item.NAME;
+                filterHtml += '<option value="' + item.CODE + '">' + label + '</option>';
+                modalHtml += '<option value="' + item.CODE + '" data-dietid="' + item.ID + '">' + label + '</option>';
             });
 
-            if ($("#ddlDietType")[0].sumo) {
-                $("#ddlDietType")[0].sumo.reload();
-            }
+            $("#ddlDietType").html(filterHtml);
+            if ($("#ddlDietType")[0].sumo) $("#ddlDietType")[0].sumo.reload();
 
-            var $dietList = $("#dietList");
-            $dietList.empty();
-            $.each(res, function (i, item) {
-                var html = `
-                    <div class="diet-item">
-                        <input type="checkbox" value="${item.CODE}" data-dietid="${item.ID}" />
-                        <span class="diet-code">${item.CODE}</span>
-                        <span class="diet-name">${item.NAME}</span>
-                    </div>
-                `;
-                $dietList.append(html);
-            });
-
+            var keep = getMulti('ddlAllowedDietTypes');
+            $("#ddlAllowedDietTypes").html(modalHtml);
+            setMulti('ddlAllowedDietTypes', keep);
         },
         error: function (xhr, status, error) {
             console.error("Error loading diet master list:", error);
@@ -51,178 +121,6 @@ function LoadDietTypeDropdown() {
     });
 }
 
-function CreateMenuItem(ActionType) {
-    var MenuName = ($("#txtMenuName").val() || "").trim();
-    var Category = ($("#ddlCategory").val() || "").trim();
-    var Description = ($("#txtDescription").val() || "").trim();
-    var ImagePath = ($("#txtImageUrl").val() || "").trim();
-    var IsActive = $("#chkActive").is(":checked") ? "1" : "2";
-    var CountryId = $("#ddlModalCountry").val();
-    var Calories = ($("#txtCalories").val() || "").trim();
-
-    var Action = ActionType || (($("#MenuTypeHeader").html() == "New menu item") ? "INSERT" : "UPDATE");
-    var Id = $("#hdnMenuId").val();
-
-    if (Action == "DELETE") {
-
-        var url = hurl + "Service/Service.aspx?Process=" +
-            encodeURIComponent(Encrypt("INSERTUPDATEMENUITEM")) +
-            "&ACTION=" + encodeURIComponent(Encrypt("DELETE")) +
-            "&ID=" + encodeURIComponent(Encrypt(Id));
-
-        $.ajax({
-            url: url,
-            type: "GET",
-            dataType: "json",
-            success: function (res) {
-                var result = res && res[0] ? res[0].RESULT : "";
-                if (result.toUpperCase() == "TRUE") {
-                    $('#LBLRequestResult').html('Menu Item Deleted Successfully');
-                    ShowModalPopUp('modalSuccess');
-                    setTimeout(function () { HideModalPopUp('modalSuccess'); }, 2500);
-                    $("#deleteMenuModal").modal("hide");
-                    LoadMenuTypes();
-                }
-                else {
-                    alert("Failed to deactivate menu item");
-                }
-            },
-            error: function (xhr, status, error) {
-                console.log(error);
-                alert("Ajax error");
-            }
-        });
-
-        return false;
-    }
-
-    var AllowedDietTypes = [];
-    var MealTimings = [];
-    var AllergensArr = [];
-    var TagsArr = [];
-    var ServingCodes = [];
-
-    $("#allergenContainer .pill").each(function () {
-        AllergensArr.push($(this).contents().get(0).nodeValue.trim());
-    });
-
-    $("#tagContainer .pill").each(function () {
-        TagsArr.push($(this).contents().get(0).nodeValue.trim());
-    });
-
-    var AllergenStr = AllergensArr.join(",");
-    var TagStr = TagsArr.join(",");
-
-    $("#dietList input[type='checkbox']:checked").each(function () {
-        AllowedDietTypes.push($(this).val());
-    });
-
-    $("#mealTimingList input[type='checkbox']:checked").each(function () {
-        MealTimings.push($(this).val());
-    });
-    $("#servingTimingList input[type='checkbox']:checked").each(function () {
-        ServingCodes.push($(this).val());
-    });
-
-    var AllowedDietType = AllowedDietTypes.join(",");
-    var MealTiming = MealTimings.join(",");
-    var ServingCode = ServingCodes.join(",");
-    var isValid = true;
-
-    $("#errMenuName").hide();
-    $("#errDietType").hide();
-    $("#txtMenuName").removeClass("error-border");
-    $("#dietList").removeClass("error-border");
-
-    if (MenuName.length == 0) {
-        $("#txtMenuName").addClass("error-border");
-        $("#errMenuName").text("Name is required").show();
-        isValid = false;
-    }
-
-    if (AllowedDietTypes.length == 0) {
-        $("#dietList").addClass("error-border");
-        $("#errDietType").text("Pick at least one diet").show();
-        isValid = false;
-    }
-
-    if (!isValid) {
-        setTimeout(function () {
-            $("#txtMenuName").removeClass("error-border");
-            $("#dietList").removeClass("error-border");
-            $("#errMenuName").hide();
-            $("#errDietType").hide();
-        }, 3000);
-        return false;
-    }
-
-    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("INSERTUPDATEMENUITEM")) +
-        "&FOODNAME=" + encodeURIComponent(Encrypt(MenuName)) +
-        "&CATEGORY=" + encodeURIComponent(Encrypt(Category)) +
-        "&DESCRIPTION=" + encodeURIComponent(Encrypt(Description)) +
-        "&SERVINGCODE=" + encodeURIComponent(Encrypt(ServingCode)) +
-        "&ALLOWEDDIETTYPE=" + encodeURIComponent(Encrypt(AllowedDietType)) +
-        "&IMAGEPATH=" + encodeURIComponent(Encrypt(ImagePath)) +
-        "&ISACTIVE=" + encodeURIComponent(Encrypt(IsActive)) +
-        "&ALLERGENS=" + encodeURIComponent(Encrypt(AllergenStr)) +
-        "&TAGS=" + encodeURIComponent(Encrypt(TagStr)) +
-        "&COUNTRYID=" + encodeURIComponent(Encrypt(CountryId || "0")) + 
-        "&CALORIES=" + encodeURIComponent(Encrypt(Calories)) +          
-        "&ACTION=" + encodeURIComponent(Encrypt(Action)) +
-        "&ID=" + encodeURIComponent(Encrypt(Id));
-
-    $.ajax({
-        url: url,
-        type: "GET",
-        dataType: "json",
-        success: function (res) {
-            var result = res && res[0] ? res[0].RESULT : "";
-            if (result.toUpperCase() == "TRUE") {
-                $('#LBLRequestResult').html('Menu Item Added Successfully');
-                ShowModalPopUp('modalSuccess');
-                setTimeout(function () { HideModalPopUp('modalSuccess'); }, 2500);
-                HideModalPopUp('menuItemModal');
-                ClearMenuItem();
-                LoadMenuTypes();
-            } else {
-                alert("Failed to save menu item");
-            }
-        },
-        error: function (xhr, status, error) {
-            console.log(error);
-            alert("Ajax error");
-        }
-    });
-}
-
-function ClearMenuItem() {
-
-    $("#txtMenuName").val('');
-    $("#ddlCategory").prop('selectedIndex', 0);
-    $("#txtDescription").val('');
-    $("#txtImageUrl").val('');
-
-    $("#ddlModalCountry").prop('selectedIndex', 0);
-    if ($("#ddlModalCountry")[0] && $("#ddlModalCountry")[0].sumo) {
-        $("#ddlModalCountry")[0].sumo.unSelectAll();
-    }
-    $("#txtCalories").val('');
-    $("#chkActive").prop('checked', true);
-    $("#mealTimingList input[type='checkbox']").prop('checked', false);
-    $("#dietList input[type='checkbox']").prop('checked', false);
-    $("#errMenuName").hide();
-    $("#errDietType").hide();
-    $("#txtMenuName").removeClass("error-border");
-    $("#dietList").removeClass("error-border");
-    $("#txtAllergen").val("");
-    $("#txtTag").val("");
-    $("#allergenContainer").empty();
-    $("#tagContainer").empty();
-    $("#btnAddAllergen, #btnAddTag").removeClass("active-text");
-    $("#dietList input[type='checkbox']").prop("checked", false);
-    $("#dietList div").removeClass("selected-diet");
-
-}
 function LoadCountryDropdowns() {
     var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETCOUNTRIES"));
     $.ajax({
@@ -232,28 +130,233 @@ function LoadCountryDropdowns() {
         success: function (res) {
             var filterHtml = '<option value="">All Countries</option>';
             var modalHtml = '<option value="">Select Country</option>';
+            COUNTRY_MAP = {};
 
             if (res && res.length > 0) {
                 $.each(res, function (i, item) {
                     filterHtml += '<option value="' + item.ID + '">' + item.CountryName + '</option>';
                     modalHtml += '<option value="' + item.ID + '">' + item.CountryName + '</option>';
+                    COUNTRY_MAP[String(item.CountryName).trim().toLowerCase()] = String(item.ID);
                 });
             }
             $("#ddlCountryFilter").html(filterHtml);
             $("#ddlModalCountry").html(modalHtml);
 
-            if ($("#ddlCountryFilter")[0].sumo) {
-                $("#ddlCountryFilter")[0].sumo.reload();
-            }
-            if ($("#ddlModalCountry")[0].sumo) {
-                $("#ddlModalCountry")[0].sumo.reload();
-            }
+            if ($("#ddlCountryFilter")[0].sumo) $("#ddlCountryFilter")[0].sumo.reload();
+            if ($("#ddlModalCountry")[0].sumo) $("#ddlModalCountry")[0].sumo.reload();
         }
     });
 }
 
+function LoadServingTimings() {
+    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETSERVINGLIST"));
+
+    $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (res) {
+            var html = "";
+            $.each(res || [], function (i, item) {
+                html += `
+                    <label class="serving-checkbox-card">
+                        <div class="serving-header">
+                            <input type="checkbox" class="serving-checkbox" value="${item.CODE}" />
+                            <span class="serving-name">${item.NAME}</span>
+                        </div>
+                        <div class="serving-time">${item.StartTime} - ${item.EndTime}</div>
+                    </label>`;
+            });
+            $("#servingTimingList").html(html);
+        }
+    });
+}
+
+function LoadCategories() {
+    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETSERVINGLIST"));
+    $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (res) {
+            var html = "";
+            html += `<button type="button" class="category-btn" data-value="DEFAULT"><span class="category-icon">⭐</span><span class="category-name"> Default Food</span></button>`;
+            html += `<button type="button" class="category-btn active" data-value=""><span class="category-icon">🍽️</span><span class="category-name">All Servings</span></button>`;
+            $.each(res || [], function (i, item) {
+                var iconHtml = "";
+                if (item.IMGPATH && item.IMGPATH.trim() !== "") {
+                    iconHtml = `<img src="${item.IMGPATH}" class="category-icon-img" alt="${item.NAME}" onerror="this.style.display='none';" />`;
+                } else {
+                    iconHtml = `<span class="category-icon">🍽️</span>`;
+                }
+                html += `<button type="button" class="category-btn" data-value="${item.CODE}"> ${iconHtml}<span class="category-name">${item.NAME} </span></button>`;
+            });
+            $("#categoryList").html(html);
+            $("#HFServingCode").val("");
+        },
+        error: function (xhr, status, error) {
+            console.log("Error loading categories:", error);
+        }
+    });
+}
+
+/* ---------- save / update / delete ---------- */
+function CreateMenuItem(ActionType) {
+    var Id = $("#hdnMenuId").val();
+    var Action = ActionType || (Id ? "UPDATE" : "INSERT");
+
+    /* ---- delete (soft) ---- */
+    if (Action == "DELETE") {
+        $.ajax({
+            url: buildMenuUrl({}, "DELETE", Id),
+            type: "GET",
+            dataType: "json",
+            success: function (res) {
+                var result = res && res[0] ? res[0].RESULT : "";
+                if (String(result).toUpperCase() == "TRUE") {
+                    $('#LBLRequestResult').html('Menu Item Deactivated Successfully');
+                    ShowModalPopUp('modalSuccess');
+                    setTimeout(function () { HideModalPopUp('modalSuccess'); }, 2500);
+                    $("#deleteMenuModal").modal("hide");
+                    LoadMenuTypes();
+                } else {
+                    alert("Failed to deactivate menu item");
+                }
+            },
+            error: function (xhr, status, error) {
+                console.log(error);
+                alert("Ajax error");
+            }
+        });
+        return false;
+    }
+
+    /* ---- gather ---- */
+    var MenuName = ($("#txtMenuName").val() || "").trim();
+    var AllowedDietTypes = getMulti('ddlAllowedDietTypes');
+    var ServingCodes = [];
+    $("#servingTimingList input[type='checkbox']:checked").each(function () {
+        ServingCodes.push($(this).val());
+    });
+
+    /* ---- validate ---- */
+    var isValid = true;
+    $("#errMenuName, #errDietType").removeClass("show").hide();
+    $("#txtMenuName").removeClass("error-border");
+    $("#ddlAllowedDietTypes").closest(".SumoSelect").removeClass("error-border");
+    $("#menuItemBasicModal .menu-input").removeClass("error-border");
+
+    if (MenuName.length == 0) {
+        $("#txtMenuName").addClass("error-border");
+        $("#errMenuName").text("Name is required").show();
+        isValid = false;
+    }
+
+    if (AllowedDietTypes.length == 0) {
+        $("#ddlAllowedDietTypes").closest(".SumoSelect").addClass("error-border");
+        $("#errDietType").text("Pick at least one diet").show();
+        isValid = false;
+    }
+
+    $.each(['txtCalories', 'txtPrice', 'txtProtein', 'txtCarbs', 'txtTotalFat', 'txtSodium', 'txtSugar'], function (i, id) {
+        if (isBadNumber(toNum(id))) {
+            $("#" + id).addClass("error-border");
+            isValid = false;
+        }
+    });
+
+    if (!isValid) {
+        setTimeout(function () {
+            $("#menuItemBasicModal .error-border").removeClass("error-border");
+            $("#errMenuName, #errDietType").hide();
+        }, 3500);
+        return false;
+    }
+
+    /* ---- send ---- */
+    var fields = {
+        FOODNAME: MenuName,
+        DESCRIPTION: ($("#txtDescription").val() || "").trim(),
+        CATEGORY: $("#ddlCategory").val() || "",
+        DAY: $("#ddlDay").val() || "0",
+        SERVINGCODE: ServingCodes.join(","),
+        ALLOWEDDIETTYPE: AllowedDietTypes.join(","),
+        DIETARYTYPE: $("#ddlDietaryType").val() || "",
+        IMAGEPATH: ($("#txtImageUrl").val() || "").trim(),
+        ISACTIVE: $("#chkActive").is(":checked") ? "1" : "2",
+        ISDEFAULTORDER: $("#chkDefaultOrder").is(":checked") ? "1" : "0",
+        ALLERGENS: getMulti('ddlAllergens').join(","),
+        TAGS: getMulti('ddlFoodTags').join(","),
+        COUNTRYID: $("#ddlModalCountry").val() || "0",
+        CALORIES: toNum('txtCalories'),
+        PRICE: toNum('txtPrice'),
+        HISID: ($("#txtHISID").val() || "").trim(),
+        VENDOR: ($("#txtVendor").val() || "").trim(),
+        PROTEIN: toNum('txtProtein'),
+        CARBS: toNum('txtCarbs'),
+        TOTALFAT: toNum('txtTotalFat'),
+        SODIUM: toNum('txtSodium'),
+        SUGAR: toNum('txtSugar'),
+        INGREDIENTS: ($("#txtIngredients").val() || "").trim()
+    };
+
+    var $btn = $("#btnCreateMenu").prop("disabled", true);
+
+    $.ajax({
+        url: buildMenuUrl(fields, Action, Id),
+        type: "GET",
+        dataType: "json",
+        success: function (res) {
+            var result = res && res[0] ? res[0].RESULT : "";
+            if (String(result).toUpperCase() == "TRUE") {
+                $('#LBLRequestResult').html(Action == "INSERT" ? 'Menu Item Added Successfully' : 'Menu Item Updated Successfully');
+                HideModalPopUp(MODAL_ID);
+                ShowModalPopUp('modalSuccess');
+                setTimeout(function () { HideModalPopUp('modalSuccess'); }, 2500);
+                ClearMenuItem();
+                LoadMenuTypes();
+            } else {
+                alert("Failed to save menu item");
+            }
+        },
+        error: function (xhr, status, error) {
+            console.log(error);
+            alert("Ajax error");
+        },
+        complete: function () {
+            $btn.prop("disabled", false);
+        }
+    });
+}
+
+function ClearMenuItem() {
+    $("#hdnMenuId").val("");
+
+    /* left panel */
+    $("#txtMenuName, #txtDescription, #txtCalories, #txtPrice, #txtHISID, #txtVendor, #txtImageUrl").val('');
+    $("#ddlDietaryType").val('');
+    $("#ddlModalCountry").prop('selectedIndex', 0);
+    if ($("#ddlModalCountry")[0] && $("#ddlModalCountry")[0].sumo) {
+        $("#ddlModalCountry")[0].sumo.unSelectAll();
+    }
+    $("#chkActive").prop('checked', true);
+    $("#chkDefaultOrder").prop('checked', false);
+
+    /* right panel */
+    $("#txtProtein, #txtCarbs, #txtTotalFat, #txtSodium, #txtSugar, #txtIngredients").val('');
+    $("#ddlCategory").val('');
+    $("#ddlDay").val('0');
+    $("#servingTimingList input[type='checkbox']").prop('checked', false);
+    $.each(MULTI_SELECTS, function (i, id) { setMulti(id, []); });
+
+    /* validation */
+    $("#errMenuName, #errDietType").hide();
+    $("#menuItemBasicModal .error-border").removeClass("error-border");
+}
+
+/* ---------- list ---------- */
 function LoadMenuTypes() {
-    var SearchText = $("#txtSearch").val().trim();
+    var SearchText = ($("#txtSearch").val() || "").trim();
     var Servingcode = $("#HFServingCode").val();
     var DietType = $("#ddlDietType").val();
     var CountryId = $("#ddlCountryFilter").val();
@@ -261,8 +364,8 @@ function LoadMenuTypes() {
 
     var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETMENUTYPELIST")) +
         "&SEARCHTEXT=" + encodeURIComponent(Encrypt(SearchText)) +
-        "&SERVINGCODE=" + encodeURIComponent(Encrypt(Servingcode)) +
-        "&DIETTYPE=" + encodeURIComponent(Encrypt(DietType)) +
+        "&SERVINGCODE=" + encodeURIComponent(Encrypt(Servingcode || "")) +
+        "&DIETTYPE=" + encodeURIComponent(Encrypt(DietType || "")) +
         "&COUNTRYID=" + encodeURIComponent(Encrypt(CountryId || "")) +
         "&INCLUDEINACTIVE=" + encodeURIComponent(Encrypt(IncludeInactive));
 
@@ -274,7 +377,7 @@ function LoadMenuTypes() {
             $("#tblMenuMaster").html('');
             if (res == null || res.length == 0) {
                 $("#tblMenuMaster").html(
-                    '<tr><td colspan="10" style="text-align:center; padding:20px; color:#555;">' +
+                    '<tr><td colspan="9" style="text-align:center; padding:20px; color:#555;">' +
                     'No menu items found. Click "Add Menu Item" to create the first one.' +
                     '</td></tr>'
                 );
@@ -289,9 +392,9 @@ function LoadMenuTypes() {
                 var createPills = function (data, cssClass) {
                     if (!data || data.trim() == "" || data.toLowerCase() == "none")
                         return '<span class="text-none">None</span>';
-                    return data.split(',').map(tag =>
-                        `<span class="badge-pill ${cssClass}">${tag.trim()}</span>`
-                    ).join('');
+                    return data.split(',').map(function (tag) {
+                        return '<span class="badge-pill ' + cssClass + '">' + escapeHtml(tag.trim()) + '</span>';
+                    }).join('');
                 };
 
                 html += '<tr>';
@@ -302,8 +405,7 @@ function LoadMenuTypes() {
                         '<div class="img-placeholder" style="display:none;">' +
                         '<img src="../images/image-placeholder.png" width="22" />' +
                         '</div>';
-                }
-                else {
+                } else {
                     html += '<div class="img-placeholder">' +
                         '<img src="../images/image-placeholder.png" width="22" />' +
                         '</div>';
@@ -312,19 +414,18 @@ function LoadMenuTypes() {
 
                 html += '<td>' +
                     '<div class="menu-name-cell">' +
-                    '<span class="menu-name-title">' + item.FOODNAME + '</span>' +
-                    '<span class="menu-name-desc">' + (item.DESCRIPTION || "") + '</span>' +
+                    '<span class="menu-name-title">' + escapeHtml(item.FOODNAME) + '</span>' +
+                    '<span class="menu-name-desc">' + escapeHtml(item.DESCRIPTION || "") + '</span>' +
                     '</div>' +
                     '</td>';
 
-                html += '<td>' + (item.COUNTRYNAME || item.COUNTRY || '-') + '</td>';
+                html += '<td>' + escapeHtml(item.COUNTRYNAME || item.COUNTRY || '-') + '</td>';
                 html += '<td>' + (item.CALORIES || '-') + '</td>';
-
                 html += '<td>' + createPills(item.ALLOWEDDIETTYPE, 'badge-diet') + '</td>';
                 html += '<td>' + createPills(item.ALLERGENS, 'badge-allergen') + '</td>';
                 html += '<td class="text-center">' +
                     '<input type="checkbox" class="default-food-checkbox" ' +
-                    (item.ISDEFAULTORDER === true ? 'checked' : '') +
+                    (item.ISDEFAULTORDER === true || item.ISDEFAULTORDER == 1 ? 'checked' : '') +
                     ' onchange="UpdateDefaultFood(' + item.ID + ', this.checked)" />' +
                     '</td>';
                 html += '<td>' +
@@ -336,11 +437,10 @@ function LoadMenuTypes() {
                     '<button type="button" class="action-btn edit-btn" onclick="EditMenuType(' + item.ID + '); return false;">' +
                     '<img src="../images/memo.png" width="18" />' +
                     '</button>' +
-                    '<button type="button" class="action-btn delete-btn" onclick="ShowDeleteMenu(' + item.ID + ',\'' + item.FOODNAME.replace(/'/g, "\\'") + '\'); return false;">' +
+                    '<button type="button" class="action-btn delete-btn" onclick="ShowDeleteMenu(' + item.ID + ',\'' + String(item.FOODNAME).replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "&quot;") + '\'); return false;">' +
                     '<img src="../images/delete.png" width="18" />' +
                     '</button>' +
                     '</td>';
-
                 html += '</tr>';
             });
 
@@ -354,7 +454,6 @@ function LoadMenuTypes() {
 }
 
 function UpdateDefaultFood(id, isChecked) {
-
     var isDefault = isChecked ? 1 : 0;
 
     var url = hurl + "Service/Service.aspx?Process=" +
@@ -365,17 +464,12 @@ function UpdateDefaultFood(id, isChecked) {
     $.ajax({
         url: url,
         type: "POST",
-        success: function (res) {
-            if (isChecked) {
-                $('#LBLRequestResult').html("Menu item marked as default food successfully.");
-            } else {
-                $('#LBLRequestResult').html("Menu item removed from default food successfully.");
-            }
+        success: function () {
+            $('#LBLRequestResult').html(isChecked
+                ? "Menu item marked as default food successfully."
+                : "Menu item removed from default food successfully.");
             ShowModalPopUp('modalSuccess');
-
-            setTimeout(function () {
-                HideModalPopUp('modalSuccess');
-            }, 2500);
+            setTimeout(function () { HideModalPopUp('modalSuccess'); }, 2500);
         },
         error: function () {
             alert("Failed to update default food.");
@@ -383,22 +477,39 @@ function UpdateDefaultFood(id, isChecked) {
         }
     });
 }
+
 function ShowDeleteMenu(ID, Name) {
     $("#hdnDeleteMenuId").val(ID);
     $("#lblDeleteMenuName").text(Name);
     $("#deleteMenuModal").modal("show");
 }
+
 function ConfirmDeleteMenu() {
     $("#hdnMenuId").val($("#hdnDeleteMenuId").val());
     CreateMenuItem("DELETE");
     $("#deleteMenuModal").modal("hide");
 }
+
+/* ---------- open modal: new / edit ---------- */
+function OpenNewMenuItem() {
+    ClearMenuItem();
+    $("#BasicModalHeader").text("New menu item");
+    $("#btnCreateMenu").text("Save menu item");
+    ShowModalPopUp(MODAL_ID);
+}
+
 function EditMenuType(ID) {
+    ClearMenuItem();
     $("#hdnMenuId").val(ID);
-    $("#MenuTypeHeader").text("Edit menu item");
-    $("#btnCreateMenu").text("Save Changes");
-    $("#menuItemModal").modal("show");
+    $("#BasicModalHeader").text("Edit menu item");
+    $("#btnCreateMenu").text("Save changes");
+    ShowModalPopUp(MODAL_ID);
     GetMenuTypeById(ID);
+}
+
+function splitCsv(v) {
+    if (!v) return [];
+    return String(v).split(',').map(function (x) { return $.trim(x); }).filter(function (x) { return x !== ''; });
 }
 
 function GetMenuTypeById(ID) {
@@ -412,73 +523,45 @@ function GetMenuTypeById(ID) {
             if (!res || res.length == 0) return;
             var item = res[0];
 
+            /* left panel */
             $("#txtMenuName").val(item.FOODNAME);
-            $("#ddlCategory").val(item.CATEGORY);
             $("#txtDescription").val(item.DESCRIPTION);
+            $("#txtCalories").val(item.CALORIES || '');
+            $("#ddlDietaryType").val(item.DIETARYTYPE || '');
+            $("#txtPrice").val(item.PRICE || '');
+            $("#txtHISID").val(item.HISID || '');
+            $("#txtVendor").val(item.VENDOR || '');
             $("#txtImageUrl").val(item.IMAGEPATH);
             $("#chkActive").prop("checked", item.ISACTIVE == 1);
-            $("#AutoOrderActive").prop("checked", item.ISDEFAULTORDER);
-            $("#txtCalories").val(item.CALORIES || '');
+            $("#chkDefaultOrder").prop("checked", item.ISDEFAULTORDER === true || item.ISDEFAULTORDER == 1);
 
             setTimeout(function () {
                 if (item.COUNTRYID) {
                     $("#ddlModalCountry").val(item.COUNTRYID);
                     if ($("#ddlModalCountry")[0] && $("#ddlModalCountry")[0].sumo) {
-                        $("#ddlModalCountry")[0].sumo.selectItem(item.COUNTRYID);
-                    }
-                } else {
-                    $("#ddlModalCountry").prop('selectedIndex', 0);
-                    if ($("#ddlModalCountry")[0] && $("#ddlModalCountry")[0].sumo) {
-                        $("#ddlModalCountry")[0].sumo.unSelectAll();
+                        $("#ddlModalCountry")[0].sumo.selectItem(String(item.COUNTRYID));
                     }
                 }
             }, 150);
 
-            $("#mealTimingList input[type='checkbox']").prop("checked", false).trigger("change");
-            if (item.MEALTIMING) {
-                var mealTimings = item.MEALTIMING.split(',');
-                $.each(mealTimings, function (i, value) {
-                    $("#mealTimingList input[value='" + $.trim(value) + "']").prop("checked", true).trigger("change");
-                });
-            }
+            /* right panel */
+            $("#txtProtein").val(item.PROTEIN || '');
+            $("#txtCarbs").val(item.CARBS || '');
+            $("#txtTotalFat").val(item.TOTALFAT || '');
+            $("#txtSodium").val(item.SODIUM || '');
+            $("#txtSugar").val(item.SUGAR || '');
+            $("#txtIngredients").val(item.INGREDIENTS || '');
+            $("#ddlCategory").val(item.CATEGORY || '');
+            $("#ddlDay").val(item.DAY != null && item.DAY !== '' ? String(item.DAY) : '0');
 
-            $("#dietList input[type='checkbox']").prop("checked", false).trigger("change");
-            if (item.ALLOWEDDIETTYPE) {
-                var dietTypes = item.ALLOWEDDIETTYPE.split(',');
-                $.each(dietTypes, function (i, value) {
-                    $("#dietList input[value='" + $.trim(value) + "']").prop("checked", true).trigger("change");
-                });
-            }
+            $("#servingTimingList input[type='checkbox']").prop("checked", false);
+            $.each(splitCsv(item.SERVINGCODE), function (i, value) {
+                $("#servingTimingList input[value='" + value + "']").prop("checked", true);
+            });
 
-            $("#servingTimingList input[type='checkbox']").prop("checked", false).trigger("change");
-            if (item.SERVINGCODE) {
-                var servingCodes = item.SERVINGCODE.split(',');
-                $.each(servingCodes, function (i, value) {
-                    $("#servingTimingList input[value='" + $.trim(value) + "']").prop("checked", true).trigger("change");
-                });
-            }
-
-            $("#allergenContainer").html('');
-            if (item.ALLERGENS && item.ALLERGENS != '') {
-                var allergens = item.ALLERGENS.split(',');
-                $.each(allergens, function (i, value) {
-                    value = $.trim(value);
-                    if (value != '') {
-                        $("#allergenContainer").append('<span class="pill allergen-pill">' + value + '<span class="remove-pill" onclick="RemovePill(this)">×</span>' + '</span>');
-                    }
-                });
-            }
-
-            $("#tagContainer").html('');
-            if (item.TAGS && item.TAGS != '') {
-                var tags = item.TAGS.split(',');
-                $.each(tags, function (i, value) {
-                    value = $.trim(value);
-                    if (value != '') {
-                        $("#tagContainer").append('<span class="pill tag-pill">' + value + '<span class="remove-pill" onclick="RemovePill(this)">×</span>' + '</span>');
-                    }
-                });
-            }
+            setMulti('ddlAllowedDietTypes', splitCsv(item.ALLOWEDDIETTYPE));
+            setMulti('ddlAllergens', splitCsv(item.ALLERGENS).map(function (x) { return x.toLowerCase(); }));
+            setMulti('ddlFoodTags', splitCsv(item.TAGS).map(function (x) { return x.toLowerCase().replace(/\s+/g, '-'); }));
         },
         error: function (xhr, status, error) {
             console.log(error);
@@ -487,13 +570,7 @@ function GetMenuTypeById(ID) {
     });
 }
 
-function OpenNewMenuItem() {
-    ClearMenuItem();
-    $("#hdnMenuId").val("");
-    $("#MenuTypeHeader").text("New menu item");
-    $("#btnCreateMenu").text("Create menu item");
-    $("#menuItemModal").modal("show");
-}
+/* ---------- filter events ---------- */
 $(document).on('change', '#ddlCountryFilter', function () {
     LoadMenuTypes();
 });
@@ -503,6 +580,7 @@ $(document).on("keyup", "#txtSearch", function () {
 $(document).on("click", ".category-btn", function () {
     $(".category-btn").removeClass("active");
     $(this).addClass("active");
+    $("#HFServingCode").val($(this).attr("data-value") || "");
     LoadMenuTypes();
 });
 $(document).on("click", ".timing-btn", function () {
@@ -513,118 +591,14 @@ $(document).on("click", ".timing-btn", function () {
 $(document).on("change", "#ddlDietType", function () {
     LoadMenuTypes();
 });
-var IncludeInactive = 0;
 $(document).on("click", "#btnInactive", function () {
     $(this).toggleClass("active");
     LoadMenuTypes();
-
 });
 
-function DeleteMenuType(ID) {
-
-    if (!confirm("Are you sure you want to delete this menu item?")) {
-        return false;
-    }
-
-    var url = hurl + "Service/Service.aspx?Process=" +
-        encodeURIComponent(Encrypt("INSERTUPDATEMENUITEM")) +
-        "&ACTION=" + encodeURIComponent(Encrypt("DELETE")) +
-        "&ID=" + encodeURIComponent(Encrypt(ID));
-
-    $.ajax({
-        url: url,
-        type: "GET",
-        dataType: "json",
-        success: function (res) {
-            var result = res && res[0] ? res[0].RESULT : "";
-            if (result.toUpperCase() == "TRUE") {
-                $('#LBLRequestResult').html('Menu Item Deleted Successfully');
-                ShowModalPopUp('modalSuccess');
-                setTimeout(function () {
-                    HideModalPopUp('modalSuccess');
-                }, 2500);
-
-                LoadMenuTypes();
-            }
-            else {
-                alert("Failed to delete menu item");
-            }
-        },
-        error: function (xhr, status, error) {
-            console.log(error);
-            alert("Ajax error");
-        }
-    });
-
-    return false;
-}
-
-
-
-function LoadServingTimings() {
-
-    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETSERVINGLIST"));
-
-    $.ajax({
-        url: url,
-        type: "GET",
-        dataType: "json",
-        success: function (res) {
-
-            var html = "";
-
-            $.each(res, function (i, item) {
-
-                html += `
-                    <label class="serving-checkbox-card">
-
-                        <div class="serving-header">
-                            <input type="checkbox"
-                                   class="serving-checkbox"
-                                   value="${item.CODE}" />
-
-                            <span class="serving-name">${item.NAME}</span>
-                        </div>
-
-                        <div class="serving-time">
-                            ${item.StartTime} - ${item.EndTime}
-                        </div>
-
-                    </label>`;
-            });
-
-            $("#servingTimingList").html(html);
-        }
-    });
-}
-function LoadCategories() {
-    var url = hurl + "Service/Service.aspx?Process=" +encodeURIComponent(Encrypt("GETSERVINGLIST"));
-    $.ajax({
-        url: url,
-        type: "GET",
-        dataType: "json",
-        success: function (res) {
-            var html = "";          
-            html += `<button type="button" class="category-btn" data-value="DEFAULT"><span class="category-icon">⭐</span><span class="category-name"> Default Food</span></button>`;
-            html += `<button type="button" class="category-btn active" data-value=""><span class="category-icon">🍽️</span><span class="category-name">All Servings</span></button>`;
-            $.each(res, function (i, item) {
-                var iconHtml = "";
-                if (item.IMGPATH && item.IMGPATH.trim() !== "") {
-                    iconHtml = `<img src="${item.IMGPATH}" class="category-icon-img" alt="${item.NAME}" onerror="this.style.display='none';" />`;
-                }
-                else {
-                    iconHtml = `<span class="category-icon">🍽️</span>`;
-                }
-                html += `<button type="button" class="category-btn" data-value="${item.CODE}"> ${iconHtml}<span class="category-name">${item.NAME} </span></button>`;
-            });
-            $("#categoryList").html(html);
-            $("#HFServingCode").val("");
-        },
-        error: function (xhr, status, error) {
-            console.log("Error loading categories:",error);
-        }
-    });
-}
+/* =====================================================================
+   Section 2 : Food-order popup (unchanged)
+   ===================================================================== */
 var psCurrentPage = 1;
 var psRowsPerPage = 10;
 var psAllFeedback = [];
@@ -2841,20 +2815,70 @@ $(document).on('click', '.meal-tab.is-locked', function (e) {
 });
 
 
+
+/* =====================================================================
+   Section 3 : Excel import / template  (includes all new parameters)
+   ===================================================================== */
+
+/* Excel header (letters only, upper-cased)  ->  internal key */
 var MENU_EXCEL_COLUMN_MAP = {
     'MEALNAME': 'MenuName',
     'DESCRIPTION': 'Description',
     'SERVINGNAME': 'ServingName',
     'DIETTYPE': 'DietType',
+    'DIETARYTYPE': 'DietaryType',
+    'CATEGORY': 'Category',
     'ALLERGY': 'Allergies',
     'TAGS': 'Tags',
+    'FOODTAGS': 'FoodTags',
     'IMAGENAME': 'ImagePath',
     'DEFAULTORDER': 'DefaultOrder',
-    'FOOD_TAGS': 'FoodTags',
+    'ACTIVE': 'Active',
     'DAY': 'Day',
     'COUNTRY': 'Country',
-    'CALORIES': 'Calories'
+    'CALORIES': 'Calories',
+    'PRICE': 'Price',
+    'HISID': 'HISID',
+    'VENDOR': 'Vendor',
+    'PROTEIN': 'Protein',
+    'CARBS': 'Carbs',
+    'TOTALFAT': 'TotalFat',
+    'SODIUM': 'Sodium',
+    'SUGAR': 'Sugar',
+    'INGREDIENTS': 'Ingredients'
 };
+
+var MENU_EXCEL_HEADERS = [
+    'MEALNAME', 'DESCRIPTION', 'SERVINGNAME', 'DIETTYPE', 'DIETARYTYPE', 'CATEGORY',
+    'ALLERGY', 'TAGS', 'FOOD_TAGS', 'IMAGENAME', 'DEFAULTORDER', 'ACTIVE',
+    'DAY', 'COUNTRY', 'CALORIES', 'PRICE', 'HIS_ID', 'VENDOR',
+    'PROTEIN', 'CARBS', 'TOTAL_FAT', 'SODIUM', 'SUGAR', 'INGREDIENTS'
+];
+
+var MENU_EXCEL_SAMPLE = [
+    'Avocado Toast', 'Whole wheat toast with avocado', 'BREAKFAST', 'DM,CARD', 'VEG', '',
+    'gluten,eggs', 'high-fiber', 'low-fat', 'avocado.jpg', 'NO', 'YES',
+    'All Days', 'India', 105, 4.5, 'HIS1001', 'Fresh Foods',
+    3.4, 19.8, 1.6, 135, 0.4, 'whole wheat bread, avocado, olive oil'
+];
+
+var DAY_MAP = {
+    'ALLDAYS': '0', 'ALL': '0', '0': '0',
+    'MONDAY': '1', 'MON': '1', '1': '1',
+    'TUESDAY': '2', 'TUE': '2', '2': '2',
+    'WEDNESDAY': '3', 'WED': '3', '3': '3',
+    'THURSDAY': '4', 'THU': '4', '4': '4',
+    'FRIDAY': '5', 'FRI': '5', '5': '5',
+    'SATURDAY': '6', 'SAT': '6', '6': '6',
+    'SUNDAY': '7', 'SUN': '7', '7': '7'
+};
+
+var DIETARY_MAP = {
+    'VEG': 'VEG', 'VEGETARIAN': 'VEG',
+    'NONVEG': 'NONVEG', 'NONVEGETARIAN': 'NONVEG', 'NON-VEG': 'NONVEG', 'NON-VEGETARIAN': 'NONVEG',
+    'VEGAN': 'VEGAN'
+};
+
 function toggleExcelDropdown(e) {
     e.stopPropagation();
     var menu = document.getElementById('excelDropdownMenu');
@@ -2876,6 +2900,7 @@ function triggerExcelImport() {
     inp.value = '';
     inp.click();
 }
+
 function downloadImportTemplate() {
     var menu = document.getElementById('excelDropdownMenu');
     if (menu) menu.classList.remove('show');
@@ -2884,31 +2909,48 @@ function downloadImportTemplate() {
         return;
     }
 
-    var headers = [
-        'MEALNAME', 'DESCRIPTION', 'SERVINGNAME', 'DIETTYPE',
-        'ALLERGY', 'TAGS', 'IMAGENAME', 'DEFAULTORDER', 'FOOD_TAGS',
-        'DAY', 'COUNTRY', 'CALORIES'
-    ];
-
     var workbook = new ExcelJS.Workbook();
     var worksheet = workbook.addWorksheet('MenuTemplate');
-    var headerRow = worksheet.addRow(headers);
+    var headerRow = worksheet.addRow(MENU_EXCEL_HEADERS);
 
     headerRow.eachCell(function (cell) {
-        cell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FF009688' }
-        };
-        cell.font = {
-            color: { argb: 'FFFFFFFF' },
-            bold: true
-        };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF009688' } };
+        cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
     });
-    worksheet.columns.forEach(function (column) {
-        column.width = 22;
+
+    var sample = worksheet.addRow(MENU_EXCEL_SAMPLE);
+    sample.eachCell(function (cell) {
+        cell.font = { italic: true, color: { argb: 'FF6B7280' } };
     });
+
+    worksheet.columns.forEach(function (column) { column.width = 20; });
+    worksheet.getColumn(2).width = 34;   // DESCRIPTION
+    worksheet.getColumn(24).width = 40;  // INGREDIENTS
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // Notes sheet
+    var notes = workbook.addWorksheet('Instructions');
+    [
+        ['Column', 'Required', 'Allowed values / notes'],
+        ['MEALNAME', 'YES', 'Menu item name'],
+        ['DIETTYPE', 'YES', 'Diet type CODE(s), comma separated (e.g. DM,CARD)'],
+        ['SERVINGNAME', 'no', 'Serving CODE(s), comma separated (e.g. BREAKFAST,LUNCH)'],
+        ['DIETARYTYPE', 'no', 'VEG / NONVEG / VEGAN'],
+        ['DEFAULTORDER', 'no', 'YES / NO'],
+        ['ACTIVE', 'no', 'YES / NO (default YES)'],
+        ['DAY', 'no', 'All Days, Monday ... Sunday (default All Days)'],
+        ['COUNTRY', 'no', 'Country name exactly as in Country master (or its numeric ID)'],
+        ['ALLERGY', 'no', 'dairy, gluten, nuts, peanuts, soy, eggs, fish, shellfish, sesame (comma separated)'],
+        ['TAGS / FOOD_TAGS', 'no', 'high-protein, low-carb, low-fat, high-fiber, gluten-free, dairy-free, sugar-free, organic, halal, kosher'],
+        ['PRICE, CALORIES, PROTEIN, CARBS, TOTAL_FAT, SODIUM, SUGAR', 'no', 'Numbers only (0 or more)'],
+        ['HIS_ID, VENDOR, INGREDIENTS, CATEGORY', 'no', 'Free text']
+    ].forEach(function (r, i) {
+        var row = notes.addRow(r);
+        if (i === 0) row.font = { bold: true };
+    });
+    notes.columns = [{ width: 52 }, { width: 12 }, { width: 100 }];
+
     workbook.xlsx.writeBuffer().then(function (buffer) {
         var blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         var url = window.URL.createObjectURL(blob);
@@ -2918,6 +2960,10 @@ function downloadImportTemplate() {
         a.click();
         window.URL.revokeObjectURL(url);
     });
+}
+
+function cleanCsv(v) {
+    return String(v == null ? '' : v).split(/[,;]/).map(function (x) { return $.trim(x); }).filter(Boolean).join(',');
 }
 
 function handleExcelImport(evt) {
@@ -2948,7 +2994,7 @@ function handleExcelImport(evt) {
 
             var normalized = [];
             rows.forEach(function (rawRow) {
-                var out = { _raw: rawRow };
+                var out = {};
                 var hasValue = false;
                 Object.keys(rawRow).forEach(function (key) {
                     var normKey = String(key).replace(/[^A-Za-z]/g, '').toUpperCase();
@@ -2958,8 +3004,8 @@ function handleExcelImport(evt) {
                         if (out[mapped] !== '') hasValue = true;
                     }
                 });
-                if (out.ImagePath && !out.ImagePath.startsWith('http') && !out.ImagePath.startsWith('../')) {
-                    out.ImagePath = '../images/menu/' + out.ImagePath; 
+                if (out.ImagePath && !/^https?:/i.test(out.ImagePath) && out.ImagePath.indexOf('../') !== 0) {
+                    out.ImagePath = '../images/menu/' + out.ImagePath;
                 }
                 if (hasValue) normalized.push(out);
             });
@@ -2970,6 +3016,17 @@ function handleExcelImport(evt) {
                 var rowErrors = [];
                 if (!row.MenuName) rowErrors.push('MEALNAME missing');
                 if (!row.DietType) rowErrors.push('DIETTYPE missing');
+
+                ['Calories', 'Price', 'Protein', 'Carbs', 'TotalFat', 'Sodium', 'Sugar'].forEach(function (f) {
+                    if (row[f] && (isNaN(row[f]) || parseFloat(row[f]) < 0)) rowErrors.push(f.toUpperCase() + ' must be a number');
+                });
+
+                if (row.DietaryType && !DIETARY_MAP[row.DietaryType.toUpperCase().replace(/\s+/g, '')]) {
+                    rowErrors.push('DIETARYTYPE must be VEG / NONVEG / VEGAN');
+                }
+                if (row.Day && DAY_MAP[row.Day.toUpperCase().replace(/\s+/g, '')] === undefined) {
+                    rowErrors.push('DAY "' + row.Day + '" not recognised');
+                }
 
                 if (rowErrors.length) {
                     errors.push('Row ' + lineNo + ': ' + rowErrors.join(', '));
@@ -2982,19 +3039,11 @@ function handleExcelImport(evt) {
             if (errors.length) {
                 var msg = 'The following rows have problems and will be SKIPPED:\n\n' + errors.join('\n') + '\n\n';
                 msg += (valid.length ? valid.length + ' valid row(s) will be imported. Continue?' : 'No valid rows to import.');
-                if (!valid.length || !confirm(msg)) {
-                    restoreImportButton(btn);
-                    return;
-                }
-            }
-
-            if (!valid.length) { restoreImportButton(btn); return; }
-
-            if (!errors.length) {
-                if (!confirm('Found ' + valid.length + ' menu item(s). Import now?')) {
-                    restoreImportButton(btn);
-                    return;
-                }
+                if (!valid.length) { alert(msg); restoreImportButton(btn); return; }
+                if (!confirm(msg)) { restoreImportButton(btn); return; }
+            } else if (!confirm('Found ' + valid.length + ' menu item(s). Import now?')) {
+                restoreImportButton(btn);
+                return;
             }
 
             importMenuRowsSequentially(valid, btn);
@@ -3012,6 +3061,19 @@ function restoreImportButton(btn) {
     btn.disabled = false;
     if (btn.dataset.oldText) btn.innerHTML = btn.dataset.oldText;
 }
+
+function resolveCountryId(value) {
+    if (!value) return '0';
+    if (!isNaN(value)) return String(value);
+    return COUNTRY_MAP[String(value).trim().toLowerCase()] || '0';
+}
+
+function yes(v, def) {
+    var s = String(v || '').trim().toUpperCase();
+    if (s === '') return def;
+    return (s === 'YES' || s === 'Y' || s === '1' || s === 'TRUE');
+}
+
 function importMenuRowsSequentially(rows, btn) {
     var total = rows.length;
     var okCount = 0, failCount = 0, failedLines = [];
@@ -3027,42 +3089,48 @@ function importMenuRowsSequentially(rows, btn) {
                 msg = 'Import finished. <b>' + okCount + '</b> inserted, <b>' + failCount + '</b> failed.<br/>' +
                     '<small>Failed row(s) at line: ' + failedLines.join(', ') + '</small>';
             }
-
             $('#LBLRequestResult').html(msg);
             ShowModalPopUp('modalSuccess');
             setTimeout(function () { HideModalPopUp('modalSuccess'); }, 3500);
-
             LoadMenuTypes();
             return;
         }
 
         var row = rows[i];
         if (btn) btn.innerHTML = 'Importing ' + (i + 1) + ' / ' + total + '...';
-        var isActive = "1";
 
-        var defaultOrderStr = (row.DefaultOrder || "").trim().toUpperCase();
-        var isDefaultOrder = (defaultOrderStr === "YES" || defaultOrderStr === "1") ? "1" : "0";
+        var dayKey = (row.Day || '').toUpperCase().replace(/\s+/g, '');
+        var dietary = row.DietaryType ? DIETARY_MAP[row.DietaryType.toUpperCase().replace(/\s+/g, '')] : '';
+        var tags = cleanCsv([row.Tags, row.FoodTags].filter(Boolean).join(','));
 
-        var servingCode = row.ServingName || '';
-
-        var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("INSERTUPDATEMENUITEM")) +
-            "&FOODNAME=" + encodeURIComponent(Encrypt(row.MenuName)) +
-            "&DESCRIPTION=" + encodeURIComponent(Encrypt(row.Description || '')) +
-            "&CATEGORY=" + encodeURIComponent(Encrypt('')) +
-            "&SERVINGCODE=" + encodeURIComponent(Encrypt(servingCode)) +
-            "&ALLOWEDDIETTYPE=" + encodeURIComponent(Encrypt(row.DietType || '')) +
-            "&IMAGEPATH=" + encodeURIComponent(Encrypt(row.ImagePath || '')) +
-            "&ISACTIVE=" + encodeURIComponent(Encrypt(isActive)) +
-            "&ALLERGENS=" + encodeURIComponent(Encrypt(row.Allergies || '')) +
-            "&TAGS=" + encodeURIComponent(Encrypt(row.Tags || '')) +
-            "&ISDEFAULTORDER=" + encodeURIComponent(Encrypt(isDefaultOrder)) +
-            "&COUNTRYID=" + encodeURIComponent(Encrypt(row.Country || '0')) +
-            "&CALORIES=" + encodeURIComponent(Encrypt(row.Calories || '')) +
-            "&ACTION=" + encodeURIComponent(Encrypt('INSERT')) +
-            "&ID=" + encodeURIComponent(Encrypt(''));
+        var fields = {
+            FOODNAME: row.MenuName,
+            DESCRIPTION: row.Description || '',
+            CATEGORY: row.Category || '',
+            DAY: dayKey ? DAY_MAP[dayKey] : '0',
+            SERVINGCODE: cleanCsv(row.ServingName),
+            ALLOWEDDIETTYPE: cleanCsv(row.DietType),
+            DIETARYTYPE: dietary || '',
+            IMAGEPATH: row.ImagePath || '',
+            ISACTIVE: yes(row.Active, true) ? '1' : '2',
+            ISDEFAULTORDER: yes(row.DefaultOrder, false) ? '1' : '0',
+            ALLERGENS: cleanCsv(row.Allergies).toLowerCase(),
+            TAGS: tags.toLowerCase(),
+            COUNTRYID: resolveCountryId(row.Country),
+            CALORIES: row.Calories || '',
+            PRICE: row.Price || '',
+            HISID: row.HISID || '',
+            VENDOR: row.Vendor || '',
+            PROTEIN: row.Protein || '',
+            CARBS: row.Carbs || '',
+            TOTALFAT: row.TotalFat || '',
+            SODIUM: row.Sodium || '',
+            SUGAR: row.Sugar || '',
+            INGREDIENTS: row.Ingredients || ''
+        };
 
         $.ajax({
-            url: url,
+            url: buildMenuUrl(fields, 'INSERT', ''),
             method: 'GET',
             dataType: 'json',
             success: function (res) {

@@ -2089,41 +2089,65 @@ public class DataAccess
         return dt;
     }
 
-    public static DataTable InsertUpdateMenuItem(string FoodName, string Category, string Description, string ServingCode, string AllowedDietType, string Allergens, string Tags, string ImagePath, string IsActive, string Action, string IsDefaultOrder, string Id, string CountryId, string Calories)
+    public static DataTable InsertUpdateMenuItem(
+        string FoodName, string Category, string Description, string ServingCode,
+        string AllowedDietType, string Allergens, string Tags, string ImagePath,
+        string IsActive, string Action, string IsDefaultOrder, string Id,
+        string CountryId, string Calories, string Price, string DietaryType,
+        string Day, string Protein, string Carbs, string TotalFat, string Sodium,
+        string Sugar, string Ingredients, string Vendor, string HISID)
     {
         DataTable dt = new DataTable();
-        SqlConnection Con = new SqlConnection(Tenant.ConnectionString);
 
         try
         {
-            SqlCommand cmd = new SqlCommand("SP_INSERTUPDATEMENUITEM", Con);
+            using (SqlConnection Con = new SqlConnection(Tenant.ConnectionString))
+            {
+                using (SqlCommand cmd = new SqlCommand("SP_INSERTUPDATEMENUITEM", Con))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
 
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Parameters.AddWithValue("@FOODNAME", FoodName);
-            cmd.Parameters.AddWithValue("@CATEGORY", Category);
-            cmd.Parameters.AddWithValue("@DESCRIPTION", Description);
-            cmd.Parameters.AddWithValue("@SERVINGCODE", ServingCode);
-            cmd.Parameters.AddWithValue("@ALLOWEDDIETTYPE", AllowedDietType);
-            cmd.Parameters.AddWithValue("@ALLERGENS", Allergens);
-            cmd.Parameters.AddWithValue("@TAGS", Tags);
-            cmd.Parameters.AddWithValue("@IMAGEPATH", ImagePath);
-            cmd.Parameters.AddWithValue("@ISACTIVE", IsActive);
-            cmd.Parameters.AddWithValue("@ACTION", Action);
-            cmd.Parameters.AddWithValue("@ISDEFAULTORDER", IsDefaultOrder);
-            cmd.Parameters.AddWithValue("@ID", Id);
-            cmd.Parameters.AddWithValue("@COUNTRYID", string.IsNullOrEmpty(CountryId) ? "" : CountryId);
-            cmd.Parameters.AddWithValue("@CALORIES", string.IsNullOrEmpty(Calories) ? (object)DBNull.Value : Convert.ToInt32(Calories));
+                    cmd.Parameters.AddWithValue("@FOODNAME", FoodName ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@CATEGORY", Category ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@DESCRIPTION", Description ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@SERVINGCODE", ServingCode ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ALLOWEDDIETTYPE", AllowedDietType ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ALLERGENS", Allergens ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@TAGS", Tags ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@IMAGEPATH", ImagePath ?? (object)DBNull.Value);
+                    cmd.Parameters.AddWithValue("@ISACTIVE", IsActive ?? "0");
+                    cmd.Parameters.AddWithValue("@ACTION", Action ?? "INSERT");
+                    cmd.Parameters.AddWithValue("@ISDEFAULTORDER", IsDefaultOrder ?? "0");
 
-            SqlDataAdapter da = new SqlDataAdapter(cmd);
-            da.Fill(dt);
+                    if (string.IsNullOrWhiteSpace(Id))
+                        cmd.Parameters.AddWithValue("@ID", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@ID", Convert.ToInt32(Id));
+
+                    cmd.Parameters.AddWithValue("@COUNTRYID", string.IsNullOrWhiteSpace(CountryId) ? (object)DBNull.Value : Convert.ToInt32(CountryId));
+                    cmd.Parameters.AddWithValue("@CALORIES", string.IsNullOrWhiteSpace(Calories) ? (object)DBNull.Value : Convert.ToInt32(Calories));
+                    cmd.Parameters.AddWithValue("@PRICE", string.IsNullOrWhiteSpace(Price) ? (object)DBNull.Value : Convert.ToDecimal(Price));
+                    cmd.Parameters.AddWithValue("@Dietary_Type", string.IsNullOrWhiteSpace(DietaryType) ? (object)DBNull.Value : DietaryType);
+                    cmd.Parameters.AddWithValue("@DAY", string.IsNullOrWhiteSpace(Day) ? 0 : Convert.ToInt32(Day));
+                    cmd.Parameters.AddWithValue("@PROTEIN", string.IsNullOrWhiteSpace(Protein) ? (object)DBNull.Value : Convert.ToDecimal(Protein));
+                    cmd.Parameters.AddWithValue("@CARBS", string.IsNullOrWhiteSpace(Carbs) ? (object)DBNull.Value : Convert.ToDecimal(Carbs));
+                    cmd.Parameters.AddWithValue("@TOTALFAT", string.IsNullOrWhiteSpace(TotalFat) ? (object)DBNull.Value : Convert.ToDecimal(TotalFat));
+                    cmd.Parameters.AddWithValue("@SODIUM", string.IsNullOrWhiteSpace(Sodium) ? (object)DBNull.Value : Convert.ToDecimal(Sodium));
+                    cmd.Parameters.AddWithValue("@SUGAR", string.IsNullOrWhiteSpace(Sugar) ? (object)DBNull.Value : Convert.ToDecimal(Sugar));
+                    cmd.Parameters.AddWithValue("@INGREDIENTS", string.IsNullOrWhiteSpace(Ingredients) ? (object)DBNull.Value : Ingredients);
+                    cmd.Parameters.AddWithValue("@VENDOR", string.IsNullOrWhiteSpace(Vendor) ? (object)DBNull.Value : Vendor);
+                    cmd.Parameters.AddWithValue("@HISID", string.IsNullOrWhiteSpace(HISID) ? (object)DBNull.Value : HISID);
+
+                    using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+                    {
+                        da.Fill(dt);
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
             InsertError(ex.Message, "SP_INSERTUPDATEMENUITEM");
-        }
-        finally
-        {
-            Con.Close();
         }
 
         return dt;

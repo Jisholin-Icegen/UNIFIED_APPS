@@ -30,31 +30,6 @@
     <script src="../js/bulk.js" type="text/javascript"></script>
     <script src="../js/ChangePassword.js" type="text/javascript"></script>
     <telerik:RadCodeBlock ID="RadCodeBlock" runat="server">
-    <script type="text/javascript">
-        var serverName = '<%= Session["NAME"] != null ? HttpUtility.JavaScriptStringEncode(Session["NAME"].ToString()) : "" %>';
-        var serverRole = '<%= Session["ROLE"] != null ? Session["ROLE"].ToString() : "" %>';
-        var serverRoleName = '<%= Session["ROLENAME"] != null ? HttpUtility.JavaScriptStringEncode(Session["ROLENAME"].ToString()) : "" %>';
-        var serverSessionID = '<%= Session["SESSIONID"] != null ? Session["SESSIONID"].ToString() : "" %>';
-        var serverID = '<%= Session["ID"] != null ? Session["ID"].ToString() : "" %>';
-        var serverLocID = '<%= Session["DEFAULTLOCID"] != null ? Session["DEFAULTLOCID"].ToString() : "" %>';
-        var serverLoc = '<%= Session["DEFAULTLOC"] != null ? HttpUtility.JavaScriptStringEncode(Session["DEFAULTLOC"].ToString()) : "" %>';
-        var serverExpiry = '<%= Session["EXPIRY"] != null ? Session["EXPIRY"].ToString() : "" %>';
-        var serverLurl = '<%= Session["LURL"] != null ? HttpUtility.JavaScriptStringEncode(Session["LURL"].ToString()) : "" %>';
-        var serverHosp = '<%= Session["HOSPITAL"] != null ? HttpUtility.JavaScriptStringEncode(Session["HOSPITAL"].ToString()) : "" %>';
-
-        if (serverName) {
-            sessionStorage.setItem('ID', serverID);
-            sessionStorage.setItem('NAME', serverName);
-            sessionStorage.setItem('ROLE', serverRole);
-            sessionStorage.setItem('ROLENAME', serverRoleName);
-            sessionStorage.setItem('SESSIONID', serverSessionID);
-            sessionStorage.setItem('DEFAULTLOCID', serverLocID);
-            sessionStorage.setItem('DEFAULTLOC', serverLoc);
-            sessionStorage.setItem('EXPIRY', serverExpiry);
-            sessionStorage.setItem('LURL', serverLurl);
-            sessionStorage.setItem('HOSPITAL', serverHosp);
-        }
-    </script>
 
         <script type="text/javascript">
             var dataSet = [], hurl =  '<%=ConfigurationManager.AppSettings["HTTP"].ToString() %>' + '://' +'<%=ConfigurationManager.AppSettings["EPEServer"].ToString() %>' + ':' + '<%=ConfigurationManager.AppSettings["AppPort"].ToString() %>' + "/Index/",
@@ -63,7 +38,7 @@
                 CryptoKey = '<%=ConfigurationManager.AppSettings["CryptoKey"].ToString() %>',
                 CryptoPwd = '<%=ConfigurationManager.AppSettings["CryptoIV"].ToString() %>',
                 ConProtocol = '<%=ConfigurationManager.AppSettings["HTTP"].ToString() %>',
-                CProcess = 10, grid, gridMasterTable, pageSize = 20, pageIndex = 0, Reload = window.setInterval(window.ReloadLinks, 60000), olddatetime = '', prebook = '', TimerHome, ToUpdate = false,
+                CProcess = 10, grid, gridMasterTable, pageSize = 20, pageIndex = 0, Reload = window.setInterval(ReloadLinks, 60000), olddatetime = '', prebook = '', TimerHome, ToUpdate = false,
                 FPatientName = '', TPatientName = '', MRDPatientName = '', GCancelReason, GFinishReason, GTagID, CurrentDStatus, GReqID, GPorterID, IsEdit, GMIndex = '0', GExtn = '', ReqDate = '', ReqTime = '', ReqCat = '0', RFromID = '0', RToID = '0', RHalt1 = '0', RHalt2 = '0', RPreBook = '0',
                 Efrom, ETo, ECategory, EDate, EPatient, Remarks, AReqID, APorter1, APorter2, ADept, Isclear = false, PorterID1 = '', PorterName1 = '', PorterID = '', PorterName = '', PORTERGROUP = '', ISMULTIPORTER = 'NO', IsReturn = 'NO',
                 MAReqID = '', MADept = '', MACount = 60, MANReqID = '', MANCount = 60, MANPorterID = '', MANPorterName = '', GPatientName = '', GFrom = '', GStatus = '2', GOMI = '0', GUser = '', ATReqNB = '', //MANInterval = window.setInterval(function () { processMAN(MANCount); }, 1000),
@@ -180,27 +155,14 @@
                 });
 
 
-                //$.xhrPool = [];
-                //$.ajaxSetup({
-                //    beforeSend: function (jqXHR) { $.xhrPool.push(jqXHR); }, //  annd connection to list  -- alert($.xhrPool.length);
-                //    complete: function (jqXHR) {
-                //        var i = $.xhrPool.indexOf(jqXHR);   //  get index for current connection completed
-                //        if (i > -1) $.xhrPool.splice(i, 1); //  removes from list by index  -- alert($.xhrPool.length);
-                //    }
-                //});
                 $.xhrPool = [];
                 $.ajaxSetup({
-                    beforeSend: function (jqXHR) {
-                        $.xhrPool.push(jqXHR);
-                        var h = sessionStorage.getItem('HOSPITAL');
-                        if (h && typeof Encrypt === 'function') jqXHR.setRequestHeader('X-Hospital', Encrypt(h).toString());
-                    },
+                    beforeSend: function (jqXHR) { $.xhrPool.push(jqXHR); }, //  annd connection to list  -- alert($.xhrPool.length);
                     complete: function (jqXHR) {
-                        var i = $.xhrPool.indexOf(jqXHR);
-                        if (i > -1) $.xhrPool.splice(i, 1);
+                        var i = $.xhrPool.indexOf(jqXHR);   //  get index for current connection completed
+                        if (i > -1) $.xhrPool.splice(i, 1); //  removes from list by index  -- alert($.xhrPool.length);
                     }
                 });
-
                 $('.services-btn-icon').click(function () {
                     // Remove 'active' class from all buttons
 
@@ -768,20 +730,20 @@
                     tab.css('flex', '0 0 auto');
                 });
 
-                if (roleId === 2) { 
+                if (roleId === 2) {
                     visibleTabs = [
                         tabs.executive, tabs.commandCenter, tabs.workforce, tabs.aiModules,
                         tabs.patientExp, tabs.sla, tabs.traczo, tabs.safety
                     ];
-                } else if (roleId === 14) { 
+                } else if (roleId === 14) {
                     visibleTabs = [
                         tabs.traczo, tabs.patientExp
                     ];
-                } else if (roleId === 15) { 
+                } else if (roleId === 15) {
                     visibleTabs = [
                         tabs.traczo, tabs.commandCenter, tabs.aiModules, tabs.sla, tabs.patientExp
                     ];
-                } else { 
+                } else {
                     visibleTabs = [
                         tabs.executive, tabs.commandCenter, tabs.workforce, tabs.aiModules,
                         tabs.patientExp, tabs.sla, tabs.traczo, tabs.safety
@@ -909,28 +871,13 @@
                 //  alert(gridMasterTable.get_virtualItemCount());
             }
 
-            //function ReloadLinks() {
-
-            //    if (sessionStorage.getItem('ROLE') == null)
-            //        window.location = "../Login.aspx";
-            //    ReloadLinksButton();
-            //}
-
             function ReloadLinks() {
-                var role = sessionStorage.getItem('ROLE');
-                var name = sessionStorage.getItem('NAME');
 
-                if (!role || !name) {
-                    window.location = "/Logout.aspx";
-                    return;
-                }
+                if (sessionStorage.getItem('ROLE') == null)
+                    window.location = "../Login.aspx";
                 ReloadLinksButton();
             }
 
-            function doLogout() {
-                sessionStorage.clear();
-                window.location = "/Logout.aspx";
-            }
 
         </script>
     </telerik:RadCodeBlock>
@@ -2139,7 +2086,7 @@
                                 </div>
                                <div class="hospital-title">
                                     <h5>Welcome</h5>
-                                    <h6>Burjeel Medical City (BMC) </h6><p> Mohamed Bin Zayed City - Abu Dhabi - United Arab Emirates</p>
+                                    <h6>Apollo Hospitals </h6><p>  Jubilee Hills , Hyderabad</p>
                                 </div>
                                 <br />
                                 <div style="" class="add-task-link">
@@ -2258,8 +2205,7 @@
                                                 <br />
                                                 <span style="text-decoration: underline; font-size: 12px;">Log out</span></h6>
                                         </div>
-                                        <%--<a href="../login.aspx" class="stretched-link"></a>--%>
-                                        <a href="#" onclick="doLogout(); return false;" class="stretched-link"></a>
+                                        <a href="../login.aspx" class="stretched-link"></a>
                                         <img src="../images/User.png" class="ImgUser" onmouseover="HoverOpenSideBar()" alt="Profile" />
 
 
