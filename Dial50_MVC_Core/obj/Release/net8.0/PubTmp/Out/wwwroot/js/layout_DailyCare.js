@@ -30,6 +30,13 @@ function bindNav() {
                 return;
             }
 
+            var params = new URLSearchParams(window.location.search);
+            if ((params.get("UnifiedAI") === "1" || params.get("Unified") === "1")
+                && window.BedContext && typeof window.BedContext.go === "function") {
+                window.BedContext.go(page === "FoodDining" ? "FoodDining/FoodDining" : page);
+                return;
+            }
+
             var base = (page === "FoodDining")
                 ? "/FoodDining/FoodDining"
                 : "/" + page;
@@ -61,11 +68,26 @@ function updateTime() {
 }
 
 function GoToAI() {
+    if (window.parent !== window) {
+        window.parent.postMessage({ type: "unified_ai_show_chat" }, window.location.origin);
+        return;
+    }
+
+    if (/^\/home(?:\/index)?\/?$/i.test(window.location.pathname)) {
+        var startButton = document.getElementById("idleBtn");
+        if (startButton) startButton.click();
+        return;
+    }
+
+    if (window.BedContext && typeof window.BedContext.url === "function") {
+        window.location.href = window.BedContext.url("AI/Chat");
+        return;
+    }
+
     var bedInfo = sessionStorage.getItem("bedInfo") || "";
-    var base = "/AI/Chat";
-    window.location.href = bedInfo
-        ? base + "?BedInfo=" + encodeURIComponent(bedInfo)
-        : base;
+    var url = "/AI/Chat";
+    if (bedInfo) url += "?BedInfo=" + encodeURIComponent(bedInfo);
+    window.location.href = url;
 }
 
 function getFormattedDateTime(date = new Date()) {

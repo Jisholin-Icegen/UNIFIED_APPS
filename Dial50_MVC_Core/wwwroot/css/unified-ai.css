@@ -1,27 +1,46 @@
+:root {
+    --uai-bg-1: #040711;
+    --uai-bg-2: #0B1224;
+    --uai-canvas: linear-gradient(145deg, rgba(15, 23, 42, 0.92) 0%, rgba(7, 11, 24, 0.96) 100%);
+    --uai-cyan: #00F0FF;
+    --uai-violet: #8B5CF6;
+    --uai-accent-grad: linear-gradient(135deg, #00F0FF 0%, #3B82F6 55%, #8B5CF6 100%);
+    --uai-cyan-soft: rgba(0, 240, 255, 0.12);
+    --uai-cyan-line: rgba(255, 255, 255, 0.18);
+    --uai-rim-light: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    --uai-green: #34D399;
+    --uai-green-2: #10B981;
+    --uai-white: #F8FAFC;
+    --uai-slate: #94A3B8;
+    --uai-danger: #EF4444;
+    --uai-danger-dark: #DC2626;
+    --uai-card: rgba(11, 18, 36, 0.92);
+    --uai-line: rgba(148, 163, 184, 0.2);
+    --uai-bar-max-width: 500px;
+    --uai-popup-width: 390px;
+}
+
 #unifiedAiModuleLayer {
     position: fixed;
     inset: 0;
     z-index: 100000;
     display: none;
-    background: #f8fafc;
+    background: #ffffff;
 }
 
-#unifiedAiModuleLayer.is-open {
-    display: block;
-}
+    #unifiedAiModuleLayer.is-open {
+        display: block;
+    }
 
 #unifiedAiModuleFrame {
     display: block;
     width: 100%;
     height: 100%;
     border: 0;
-    background: #f8fafc;
+    background: #ffffff;
 }
 
-#unifiedAiFloatingBar[hidden] {
-    display: none !important;
-}
-
+#unifiedAiFloatingBar[hidden],
 #unifiedAiTestPanel[hidden],
 #unifiedAiTestLauncher[hidden] {
     display: none !important;
@@ -35,23 +54,42 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    width: min(560px, calc(100vw - 24px));
-    min-height: 78px;
-    padding: 10px 12px 10px 16px;
+    gap: 10px;
+    width: fit-content;
+    min-width: min(300px, calc(100vw - 24px));
+    max-width: min(var(--uai-bar-max-width), calc(100vw - 24px));
+    min-height: 66px;
+    padding: 8px 11px 8px 13px;
     transform: translateX(-50%);
-    border: 1px solid rgba(255, 255, 255, .12);
+    border: 1px solid var(--uai-cyan-line);
     border-radius: 999px;
-    background: #0c1820;
-    box-shadow: 0 12px 36px rgba(0, 0, 0, .34);
-    color: #ffffff;
-    font-family: inherit;
+    background: var(--uai-canvas);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.36), var(--uai-rim-light);
+    color: var(--uai-white);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
+
+    #unifiedAiFloatingBar:hover {
+        border-color: rgba(0, 240, 255, 0.4);
+        box-shadow: 0 20px 44px rgba(0, 0, 0, 0.7), 0 0 22px rgba(0, 240, 255, 0.16), var(--uai-rim-light);
+    }
+
+    #unifiedAiFloatingBar button:focus-visible {
+        outline: 2px solid var(--uai-cyan);
+        outline-offset: 2px;
+    }
 
 #unifiedAiReturnButton {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    flex: 0 1 auto;
     min-width: 0;
     padding: 0;
     border: 0;
@@ -62,149 +100,293 @@
     touch-action: none;
 }
 
-#unifiedAiReturnButton img {
-    width: 48px;
-    height: 48px;
-    flex: 0 0 48px;
-    border: 2px solid rgba(255, 255, 255, .85);
-    border-radius: 50%;
-    object-fit: cover;
-}
+    #unifiedAiReturnButton img {
+        width: 42px;
+        height: 42px;
+        flex: 0 0 42px;
+        border: 1.5px solid rgba(255, 255, 255, 0.24);
+        border-radius: 50%;
+        object-fit: cover;
+        background: var(--uai-bg-2);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.38);
+    }
 
 .unified-ai-bar-copy {
     display: grid;
-    gap: 3px;
+    gap: 2px;
     min-width: 0;
 }
 
-.unified-ai-bar-copy strong {
+    .unified-ai-bar-copy strong {
+        color: var(--uai-white);
+        overflow: hidden;
+        font-size: 14.5px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+#unifiedAiBarStatus {
+    position: relative;
     overflow: hidden;
-    font-size: 15px;
-    font-weight: 700;
+    padding-left: 13px;
+    color: var(--uai-green);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-#unifiedAiBarStatus {
-    overflow: hidden;
-    color: #40d187;
-    font-size: 14px;
-    font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    #unifiedAiBarStatus::before {
+        content: "";
+        position: absolute;
+        left: 1px;
+        top: 50%;
+        width: 7px;
+        height: 7px;
+        margin-top: -3.5px;
+        border-radius: 50%;
+        background: var(--uai-green);
+        box-shadow: 0 0 0 2.5px rgba(52, 211, 153, 0.22);
+        animation: uaiLivePulse 1.8s ease-in-out infinite;
+    }
+
+@keyframes uaiLivePulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.45;
+        transform: scale(0.86);
+    }
 }
 
 #unifiedAiBarMicButton {
     display: grid;
-    width: 54px;
-    height: 54px;
-    flex: 0 0 54px;
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
     place-items: center;
-    border: 0;
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 50%;
-    background: #05b989;
-    color: #ffffff;
-    font-size: 22px;
+    background: rgba(255, 255, 255, 0.11);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    color: var(--uai-white);
+    font-size: 19px;
     cursor: pointer;
+    transition: all 0.18s ease;
 }
 
-#unifiedAiBarMicButton.is-muted {
-    background: #dc3545;
-}
+    #unifiedAiBarMicButton:hover {
+        border-color: rgba(255, 255, 255, 0.34);
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    #unifiedAiBarMicButton:active {
+        transform: scale(0.94);
+    }
+
+    #unifiedAiBarMicButton:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    #unifiedAiBarMicButton.is-muted {
+        background: #FFFFFF;
+        border-color: #FFFFFF;
+        color: #0F172A;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.32);
+    }
 
 .unified-ai-bar-action {
     display: grid;
-    width: 44px;
-    height: 44px;
-    flex: 0 0 44px;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
     place-items: center;
-    border: 1px solid rgba(255, 255, 255, .35);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 999px;
-    background: transparent;
-    color: #ffffff;
-    font-size: 18px;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    color: var(--uai-white);
+    font-size: 17px;
     cursor: pointer;
+    transition: all 0.18s ease;
 }
 
+    .unified-ai-bar-action:hover {
+        border-color: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.17);
+    }
+
+    .unified-ai-bar-action:active {
+        transform: scale(0.94);
+    }
+
 #unifiedAiBarEndButton {
-    border-color: #dc3545;
-    background: #dc3545;
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--uai-danger) 0%, var(--uai-danger-dark) 100%);
+    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    color: #FFFFFF;
+}
+
+    #unifiedAiBarEndButton:hover {
+        background: linear-gradient(135deg, #F87171 0%, var(--uai-danger) 100%);
+        box-shadow: 0 5px 18px rgba(239, 68, 68, 0.52);
+        color: #FFFFFF;
+    }
+
+#unifiedAiFloatingBar:not(.is-dragging) {
+    cursor: grab;
+}
+
+#unifiedAiFloatingBar.is-dragging {
+    cursor: grabbing;
+    border-color: rgba(0, 240, 255, 0.55);
+    box-shadow: 0 24px 52px rgba(0, 0, 0, 0.75), 0 0 28px rgba(0, 240, 255, 0.22), var(--uai-rim-light);
+}
+
+#unifiedAiBarGrip {
+    display: grid;
+    flex: 0 0 16px;
+    width: 16px;
+    height: 34px;
+    place-items: center;
+    color: rgba(148, 163, 184, 0.6);
+    font-size: 14px;
+    line-height: 1;
+    cursor: grab;
+    touch-action: none;
+    transition: color 0.15s ease;
+}
+
+#unifiedAiFloatingBar:hover #unifiedAiBarGrip,
+#unifiedAiFloatingBar.is-dragging #unifiedAiBarGrip {
+    color: var(--uai-white);
+}
+
+#unifiedAiFloatingBar.is-dragging #unifiedAiBarGrip {
+    cursor: grabbing;
 }
 
 #unifiedAiTestLauncher {
     position: fixed;
     right: 12px;
-    bottom: 14px;
+    bottom: max(14px, env(safe-area-inset-bottom));
     z-index: 100005;
     min-height: 38px;
-    padding: 0 12px;
-    border: 1px solid #2563eb;
+    padding: 0 15px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 999px;
-    background: #2563eb;
-    color: #ffffff;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.48), var(--uai-rim-light);
+    color: var(--uai-white);
     font: inherit;
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
+    letter-spacing: 0.01em;
     cursor: pointer;
+    transition: all 0.18s ease;
 }
 
+    #unifiedAiTestLauncher:hover {
+        border-color: rgba(0, 240, 255, 0.45);
+        background: rgba(30, 41, 59, 0.96);
+    }
+
 #unifiedAiFloatingBar:not([hidden]) ~ #unifiedAiTestLauncher {
-    bottom: calc(90px + env(safe-area-inset-bottom));
+    bottom: calc(88px + env(safe-area-inset-bottom));
 }
 
 #unifiedAiTestPanel {
     position: fixed;
     right: 12px;
-    bottom: 104px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
     z-index: 100004;
-    width: min(420px, calc(100vw - 24px));
-    max-height: min(62vh, 560px);
+    width: min(var(--uai-popup-width), calc(100vw - 24px));
+    min-width: min(280px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    max-height: min(60vh, 520px);
     overflow: auto;
-    padding: 14px;
-    border: 1px solid #cbd5e1;
-    border-radius: 14px;
-    background: #ffffff;
-    box-shadow: 0 12px 36px rgba(15, 23, 42, .24);
-    color: #172b4d;
-    font-family: inherit;
+    resize: both;
+    padding: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 20px;
+    background: var(--uai-canvas);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.72), var(--uai-rim-light);
+    color: var(--uai-white);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-#unifiedAiTestPanel .unified-ai-test-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-}
+    #unifiedAiTestPanel .unified-ai-test-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+
+        #unifiedAiTestPanel .unified-ai-test-heading strong {
+            color: var(--uai-white);
+            font-size: 14.5px;
+            font-weight: 700;
+        }
 
 #unifiedAiTestStatus {
     margin-left: auto;
-    color: #15803d;
+    color: var(--uai-green);
     font-size: 12px;
-    font-weight: 700;
+    font-weight: 600;
     text-align: right;
 }
 
 #unifiedAiTestPanel p {
     margin: 8px 0;
-    font-size: 12px;
-    line-height: 1.4;
+    color: var(--uai-slate);
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+#unifiedAiTestPanel .unified-ai-test-label {
+    color: var(--uai-slate);
 }
 
 #unifiedAiTestAction {
     width: 100%;
-    min-height: 44px;
+    min-height: 42px;
     box-sizing: border-box;
-    padding: 10px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
+    padding: 9px 13px;
+    border: 1px solid var(--uai-line);
+    border-radius: 12px;
+    background: rgba(4, 7, 17, 0.75);
+    color: var(--uai-white);
     font: inherit;
     font-size: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
+
+    #unifiedAiTestAction::placeholder {
+        color: rgba(148, 163, 184, 0.6);
+    }
+
+    #unifiedAiTestAction:focus {
+        outline: none;
+        border-color: rgba(0, 240, 255, 0.6);
+        box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.15);
+    }
 
 #unifiedAiTestSuggestions {
     display: grid;
     gap: 6px;
-    max-height: min(28vh, 220px);
+    max-height: min(26vh, 210px);
     overflow: auto;
     margin-top: 8px;
 }
@@ -216,67 +398,124 @@
 
 #unifiedAiTestPanel .unified-ai-test-empty {
     margin: 4px 0;
-    color: #64748b;
+    color: var(--uai-slate);
 }
 
 #unifiedAiTestPanel button {
-    min-height: 34px;
-    padding: 6px 9px;
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    background: #f8fafc;
-    color: #172b4d;
+    min-height: 36px;
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--uai-white);
     font: inherit;
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
     cursor: pointer;
+    transition: all 0.18s ease;
 }
+
+    #unifiedAiTestPanel button:hover {
+        border-color: rgba(255, 255, 255, 0.34);
+        background: rgba(255, 255, 255, 0.16);
+    }
 
 #unifiedAiTestPanel #unifiedAiTestSessionButton {
-    border-color: #2563eb;
-    background: #2563eb;
-    color: #ffffff;
+    border: 0;
+    background: var(--uai-green-2);
+    color: #FFFFFF;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
 
+    #unifiedAiTestPanel #unifiedAiTestSessionButton:hover {
+        filter: brightness(1.08);
+    }
+
 #unifiedAiTestOutput {
-    max-height: 170px;
+    max-height: 160px;
     overflow: auto;
-    margin: 8px 0 0;
-    padding: 8px;
-    border-radius: 8px;
-    background: #0f172a;
-    color: #d1fae5;
-    font: 11px/1.4 Consolas, monospace;
+    margin: 10px 0 0;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(4, 7, 17, 0.85);
+    color: var(--uai-green);
+    font: 11px/1.45 Consolas, "JetBrains Mono", monospace;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 
-#unifiedAiTestOutput:empty {
-    display: none;
+    #unifiedAiTestOutput:empty {
+        display: none;
+    }
+
+html body #unifiedAiSuggestions button {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    color: var(--uai-white);
+    font-weight: 600;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.48), var(--uai-rim-light);
+    transition: all 0.18s ease;
+}
+
+    html body #unifiedAiSuggestions button:hover {
+        border-color: rgba(255, 255, 255, 0.36);
+        background: rgba(30, 41, 59, 0.96);
+        color: #FFFFFF;
+        transform: translateY(-1px);
+    }
+
+html body #unifiedAiSuggestions .uai-chip-close {
+    border-color: var(--uai-line);
+    background: rgba(15, 23, 42, 0.94);
+    color: var(--uai-slate);
+}
+
+    html body #unifiedAiSuggestions .uai-chip-close:hover {
+        border-color: var(--uai-danger);
+        background: var(--uai-danger);
+        color: #FFFFFF;
+    }
+
+@media (prefers-reduced-motion: reduce) {
+    #unifiedAiBarStatus::before {
+        animation: none;
+    }
 }
 
 @media (max-width: 480px) {
     #unifiedAiFloatingBar {
-        min-height: 68px;
-        padding: 8px 9px 8px 12px;
+        gap: 8px;
+        min-height: 62px;
+        padding: 7px 9px 7px 11px;
     }
 
-    #unifiedAiReturnButton img {
-        width: 42px;
-        height: 42px;
-        flex-basis: 42px;
+    #unifiedAiReturnButton {
+        gap: 8px;
     }
 
-    .unified-ai-bar-copy strong,
+        #unifiedAiReturnButton img {
+            width: 40px;
+            height: 40px;
+            flex-basis: 40px;
+        }
+
+    .unified-ai-bar-copy strong {
+        font-size: 13.5px;
+    }
+
     #unifiedAiBarStatus {
-        font-size: 13px;
+        font-size: 12px;
     }
 
     #unifiedAiBarMicButton {
-        width: 48px;
-        height: 48px;
-        flex-basis: 48px;
-        font-size: 20px;
+        width: 44px;
+        height: 44px;
+        flex-basis: 44px;
+        font-size: 18px;
     }
 
     .unified-ai-bar-action {
@@ -286,15 +525,51 @@
         font-size: 16px;
     }
 
+    #unifiedAiFloatingBar:not([hidden]) ~ #unifiedAiTestLauncher {
+        bottom: calc(82px + env(safe-area-inset-bottom));
+    }
+
     #unifiedAiTestPanel {
         right: 10px;
-        bottom: calc(86px + env(safe-area-inset-bottom));
+        bottom: calc(82px + env(safe-area-inset-bottom));
         width: calc(100vw - 20px);
-        max-height: calc(100dvh - 108px);
+        max-height: min(56dvh, 460px);
     }
 
     #unifiedAiTestSuggestions {
-        max-height: 25dvh;
+        max-height: 24dvh;
+    }
+}
+
+.unified-ai-bar-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.unified-ai-bar-timer {
+    flex: none;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.11);
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+}
+
+    .unified-ai-bar-timer[hidden] {
+        display: none;
     }
 
+.call-timer {
+    margin: -0.35rem 0 0.95rem;
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
 }

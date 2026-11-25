@@ -1,9 +1,49 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\",
+  "WorkspaceRootPath": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|e:\\unified_voice_app\\experiment\\qr_unified_voice_fixes_v5\\dial50_mvc_core\\wwwroot\\js\\dailycare.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\services\\aibridgeservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\services\\aibridgeservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\wwwroot\\js\\unified-voice-nav.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-voice-nav.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\wwwroot\\js\\unified-ai-bridge.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-ai-bridge.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\wwwroot\\js\\unified-ai-frame.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-ai-frame.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\controllers\\aibridgecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\controllers\\aibridgecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\wwwroot\\js\\unified-ai-host.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-ai-host.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\wwwroot\\js\\unified-ai-test.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-ai-test.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\views\\mydailycare\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\mydailycare\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\views\\home\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\home\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai\\dial50_mvc_core\\wwwroot\\js\\dailycare.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
       "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\dailycare.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     }
   ],
@@ -14,19 +54,157 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 4,
           "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{34e76e81-ee4a-11d0-ae2e-00a0c90fffc3}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:129:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "unified-ai-test.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-test.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-test.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-test.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-test.js",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-24T04:53:21.788Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "unified-ai-frame.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-frame.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-frame.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-frame.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-frame.js",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-24T04:53:12.769Z",
+              "EditorCaption": ""
+            },
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "Dailycare.js",
-              "DocumentMoniker": "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
-              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
-              "ToolTip": "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
-              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAA7AAAAAAAAAA==",
+              "Title": "AiBridgeService.cs",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Services\\AiBridgeService.cs",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Services\\AiBridgeService.cs",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Services\\AiBridgeService.cs",
+              "RelativeToolTip": "Dial50_MVC_Core\\Services\\AiBridgeService.cs",
+              "ViewState": "AgIAAPsBAAAAAAAAAAAIwBsCAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-11-24T04:20:34.852Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "unified-voice-nav.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-voice-nav.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-voice-nav.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-voice-nav.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-voice-nav.js",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAsAAAAzAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
-              "WhenOpened": "2026-11-20T12:08:34.721Z",
+              "WhenOpened": "2026-11-24T04:18:38.488Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "unified-ai-bridge.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-bridge.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-bridge.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-bridge.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-bridge.js",
+              "ViewState": "AgIAADQBAAAAAAAAAAAiwFYBAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-24T04:18:26.713Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "AiBridgeController.cs",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "RelativeToolTip": "Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "ViewState": "AgIAAPQEAAAAAAAAAAAIwAgFAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-11-23T12:57:34.454Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\appsettings.json",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\appsettings.json",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\appsettings.json",
+              "RelativeToolTip": "Dial50_MVC_Core\\appsettings.json",
+              "ViewState": "AgIAAAEAAAAAAAAAAAAwwBMAAAASAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-11-23T12:33:38.93Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "Index.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-11-23T12:17:59.686Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "Dailycare.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\Dailycare.js",
+              "ViewState": "AgIAAOcAAAAAAAAAAAAiwAsBAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-23T11:56:14.048Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "unified-ai-host.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "ViewState": "AgIAAHAFAAAAAAAAAAAAAJIFAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-23T11:43:24.385Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "Index.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Views\\MyDailyCare\\Index.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\MyDailyCare\\Index.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai\\Dial50_MVC_Core\\Views\\MyDailyCare\\Index.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\MyDailyCare\\Index.cshtml",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-11-23T11:47:30.235Z",
               "EditorCaption": ""
             }
           ]

@@ -105,10 +105,20 @@ self.addEventListener('notificationclick', function (event) {
         for (var i = 0; i < list.length; i++) {
             var client = list[i];
 
+            // only top-level windows (never an iframe inside the Home shell)
+            if (client.frameType && client.frameType !== 'top-level') continue;
+
             if (
                 new URL(client.url).origin === self.location.origin &&
                 'focus' in client
             ) {
+                // The Home page may own a live voice call. client.navigate() would unload it
+                // and drop the WebSocket + microphone, so ask Home to open the target itself.
+                var path = new URL(client.url).pathname;
+                if (/\/home(?:\/index)?\/?$/i.test(path) || /^\/?$/.test(path)) {
+                    client.postMessage({ type: 'push-open', url: target });
+                    return client.focus();
+                }
                 try {
                     var moved = await client.navigate(target);
                     return (moved || client).focus();

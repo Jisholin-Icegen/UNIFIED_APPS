@@ -1,16 +1,3 @@
-/*
- * Unified AI Bridge (browser side)
- * --------------------------------
- *  1. Publishes THIS device's current screen (all buttons / controls) to  PUT /api/ai-bridge/sessions/{id}/screen
- *  2. Listens on  GET /api/ai-bridge/sessions/{id}/events  (server-sent events) for the actions and suggestions
- *     the AI posts for THIS device only, and runs them through the same host path as the voice WebSocket.
- *  3. Shows the AI's suggestions as tappable chips.
- *  4. Reports every action result back so the AI can confirm it.
- *
- * It does not use the voice WebSocket at all, so navigation and clicks keep working while that socket
- * reconnects, and two devices on the same bed can never trigger each other's screens.
- * Full contract: AI_BRIDGE_API_FOR_AI_TEAM.txt
- */
 (function () {
     "use strict";
 
@@ -18,8 +5,8 @@
     if (!host || typeof host.handleAction !== "function" || window.UnifiedAIBridge) return;
 
     var API = "/api/ai-bridge/sessions/";
-    var SESSION_KEY = "dial50_ai_bridge_session";   // per browser tab
-    var DEVICE_KEY = "dial50_ai_device_id";         // per browser profile / device
+    var SESSION_KEY = "dial50_ai_bridge_session";
+    var DEVICE_KEY = "dial50_ai_device_id";
 
     function uuid() {
         if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
@@ -39,7 +26,7 @@
         }
     }
 
-    var sessionId = stored(window.sessionStorage, SESSION_KEY);
+    var sessionId = stored(window.localStorage, SESSION_KEY);
     var deviceId = stored(window.localStorage, DEVICE_KEY);
     var base = API + encodeURIComponent(sessionId);
 
@@ -48,23 +35,31 @@
         catch (error) { return ""; }
     }
 
-    // ---------------------------------------------------------------- 1. publish the current screen
+    function callActive() {
+        try { return !!(host.isRealCallActive && host.isRealCallActive()); }
+        catch (error) { return false; }
+    }
+
     var lastSignature = "";
     var lastPushAt = 0;
     var pushTimer = null;
 
     function pushScreen(force) {
-        pushTimer = null;
+        if (pushTimer) {
+            clearTimeout(pushTimer);
+            pushTimer = null;
+        }
         var context = host.getCurrentContext && host.getCurrentContext();
         if (!context) return;
+        var active = callActive();
         var signature;
-        try { signature = JSON.stringify(context); } catch (error) { return; }
+        try { signature = JSON.stringify(context) + "|" + (active ? "1" : "0"); } catch (error) { return; }
         if (!force && signature === lastSignature) return;
 
         var body = JSON.stringify({
             bed_id: bedId(),
             device_id: deviceId,
-            call_active: !!(host.isRealCallActive && host.isRealCallActive()),
+            call_active: active,
             screen: context
         });
         lastSignature = signature;
@@ -75,22 +70,27 @@
             body: body,
             credentials: "same-origin",
             keepalive: body.length < 60000
-        }).catch(function () { lastSignature = ""; });   // retry on the next change / heartbeat
+        }).catch(function () { lastSignature = ""; });
     }
 
     function schedulePush(delay) {
         if (pushTimer) return;
-        var wait = Math.max(delay || 0, 450 - (Date.now() - lastPushAt), 0);
-        pushTimer = setTimeout(pushScreen, wait);
+        var wait = Math.max(delay || 0, 80 - (Date.now() - lastPushAt), 0);
+        pushTimer = setTimeout(function () { pushScreen(false); }, wait);
     }
 
-    window.addEventListener("unified-ai:context-changed", function () { schedulePush(200); });
-    setInterval(function () { if (document.visibilityState === "visible") pushScreen(true); }, 25000);   // heartbeat
-    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") schedulePush(0); });
+    window.addEventListener("unified-ai:context-changed", function () { pushScreen(false); });
+    window.addEventListener("unified-ai:cart-changed", function () { pushScreen(true); });
+    setInterval(function () { if (document.visibilityState === "visible") pushScreen(false); }, 25000);
+    document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState !== "visible") return;
+        openStream();
+        pushScreen(false);
+    });
+    window.addEventListener("online", function () { openStream(); });
 
-    // ---------------------------------------------------------------- 2. receive actions / suggestions
     var seenRequests = [];
-    var actionNames = {};   // request_id -> action name, so results can say which action they belong to
+    var actionNames = {};
     function alreadyHandled(id) {
         if (!id) return false;
         if (seenRequests.indexOf(id) !== -1) return true;
@@ -112,8 +112,6 @@
         host.handleAction(action);
     }
 
-    // Suggestions that arrive together with a navigation belong to the page we are going TO.
-    // Hold them until that page has reported its screen (or 1.8 s passed, e.g. the click did not navigate).
     var lastActionAt = 0;
     var routeAtAction = "";
     var pendingList = null;
@@ -141,22 +139,28 @@
     }
 
     function openStream() {
-        if (source) return;
+        if (source && source.readyState !== 2) return;
+        if (source) { try { source.close(); } catch (error) { } source = null; }
         source = new EventSource(base + "/events");
         source.addEventListener("action", onAction);
         source.addEventListener("suggestions", onSuggestions);
-        source.onopen = function () { connected = true; schedulePush(0); };
+        source.onopen = function () {
+            connected = true;
+            if (Date.now() - lastPushAt > 500) {
+                lastSignature = "";
+                pushScreen(true);
+            }
+        };
         source.onerror = function () {
             connected = false;
-            if (source && source.readyState === 2) {   // CLOSED: the browser gave up, start over
+            if (source && source.readyState === 2) {
                 source.close();
                 source = null;
                 setTimeout(openStream, 2000);
-            }                                          // otherwise EventSource reconnects by itself
+            }
         };
     }
 
-    // ---------------------------------------------------------------- 3. suggestions
     var tray = null;
     var trayTimer = null;
     var trayRoute = "";
@@ -221,39 +225,68 @@
         trayTimer = setTimeout(hideSuggestions, 30000);
     }
 
-    // suggestions belong to the screen they were made for
     window.addEventListener("unified-ai:context-changed", function () {
         if (pendingList && currentRoute() !== routeAtAction) { flushPending(); return; }
         if (tray && !tray.hidden && currentRoute() !== trayRoute) hideSuggestions();
     });
 
-    // ---------------------------------------------------------------- 4. report results
-    window.addEventListener("unified-ai:action-result", function (event) {
-        var detail = event.detail || {};
-        if (!detail.request_id) return;
-        fetch(base + "/results", {
+    function postJson(path, payload, retry) {
+        fetch(base + path, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
             keepalive: true,
-            body: JSON.stringify({
-                request_id: detail.request_id,
-                action: detail.action || actionNames[detail.request_id] || "",
-                success: !!detail.success,
-                error: detail.error || "",
-                result: detail.result === undefined ? null : detail.result
-            })
-        }).catch(function () { /* the AI can still read the screen again */ });
+            body: JSON.stringify(payload)
+        }).then(function (response) {
+            if (!response.ok && retry) setTimeout(function () { postJson(path, payload, false); }, 400);
+        }).catch(function () {
+            if (retry) setTimeout(function () { postJson(path, payload, false); }, 400);
+        });
+    }
+
+    window.addEventListener("unified-ai:action-result", function (event) {
+        var detail = event.detail || {};
+        if (!detail.request_id) return;
+        postJson("/results", {
+            request_id: detail.request_id,
+            action: detail.action || actionNames[detail.request_id] || "",
+            success: !!detail.success,
+            error: detail.error || "",
+            result: detail.result === undefined ? null : detail.result
+        }, true);
+        schedulePush(60);
     });
 
-    // ---------------------------------------------------------------- start
+    var lastConfirmKey = "";
+    var lastConfirmAt = 0;
+
+    window.addEventListener("unified-ai:order-confirmed", function (event) {
+        var detail = event.detail || {};
+        var key = [detail.source || "", detail.path || "", detail.order_id || detail.orderId || ""].join("|");
+        if (key === lastConfirmKey && Date.now() - lastConfirmAt < 1500) return;
+        lastConfirmKey = key;
+        lastConfirmAt = Date.now();
+        postJson("/confirmations", {
+            source: detail.source || "page",
+            path: detail.path || "",
+            status: detail.status || "",
+            order_id: String(detail.order_id || detail.orderId || ""),
+            message: detail.message || "",
+            detail: detail.detail === undefined ? null : detail.detail
+        }, true);
+        pushScreen(true);
+    });
+
     window.UnifiedAIBridge = {
         sessionId: sessionId,
         deviceId: deviceId,
         isConnected: function () { return connected; },
-        pushNow: function () { pushScreen(true); }
+        pushNow: function () { pushScreen(true); },
+        confirm: function (detail) {
+            window.dispatchEvent(new CustomEvent("unified-ai:order-confirmed", { detail: detail || {} }));
+        }
     };
 
+    pushScreen(true);
     openStream();
-    schedulePush(300);
 })();

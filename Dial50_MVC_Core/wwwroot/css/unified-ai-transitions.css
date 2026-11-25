@@ -1,26 +1,41 @@
-/* Unified AI: smooth page entrance (content only, never the header or the tab bar).
-   Loaded only for pages that run inside the Home iframe. The "uai-entering" class is set on <html>
-   by a tiny inline script in <head> and removed after ~1 s, so later pop-ups are not animated. */
-
 @keyframes uaiContentIn {
-    from { opacity: 0; transform: translate3d(0, -16px, 0); }   /* slides DOWN into place */
-    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+    0% {
+        opacity: 0;
+        transform: translate3d(0, 10px, 0);
+    }
+
+    60% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
 }
 
-html.uai-entering .app-wrapper > :not(header):not(.app-header):not(.parent-nav):not(#pageNav):not(#navContainer):not(script):not(style):not(link):not(template):not([hidden]),
-html.uai-entering body > main {
-    animation: uaiContentIn .5s cubic-bezier(.22, 1, .36, 1) backwards;
+html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > #servicesContainer,
+html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > #servicesMenuContainer,
+html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > #pageContent,
+html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > .content,
+html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) > main {
+    will-change: opacity, transform;
+    animation: uaiContentIn .34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
-/* content that scripts fill in AFTER the entrance finished (slow API) gets the same motion */
 .uai-replay {
-    animation: uaiContentIn .5s cubic-bezier(.22, 1, .36, 1) backwards;
+    will-change: opacity, transform;
+    animation: uaiContentIn .34s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 @media (prefers-reduced-motion: reduce) {
-    html.uai-entering .app-wrapper > *,
-    html.uai-entering body > main,
+    html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > #servicesContainer,
+    html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > #servicesMenuContainer,
+    html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > #pageContent,
+    html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) .app-wrapper > .content,
+    html.uai-entering body:not([data-state="connecting"]):not([data-state="connected"]) > main,
     .uai-replay {
+        will-change: auto;
         animation: none !important;
     }
 }

@@ -1844,6 +1844,9 @@
     </div>
 
     <script>
+
+        var isUnifiedAIFrame = @(isUnifiedAIFrame ? "true" : "false");
+
         var curpage = window.location.pathname.split("/").pop();
 
         var urlParams = new URLSearchParams(window.location.search);
@@ -1872,33 +1875,37 @@
                 });
             });
 
-            var backBtn = document.getElementById('assistantBackBtn');
-            if (backBtn) {
-                backBtn.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+        var isUnifiedAIFrame = @(isUnifiedAIFrame ? "true" : "false");
 
-                    if (document.body.getAttribute('data-state') !== 'idle') {
-                        if (!window.UnifiedAIChild && typeof window.endChat === 'function' && isCallActive()) {
-                            window.endChat();
-                        }
-                        navigateToDailyCare();
-                        return;
+                    var backBtn = document.getElementById('assistantBackBtn');
+                    if (backBtn) {
+                        backBtn.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            if (isUnifiedAIFrame || window.UnifiedAIChild) {
+                                if (window.parent && window.parent !== window) {
+                                    window.parent.postMessage({ type: 'unified_ai_show_home' }, window.location.origin);
+                                } else {
+                                    BedContext.go('Home/Index');
+                                }
+                                return;
+                            }
+
+                            if (document.body.getAttribute('data-state') !== 'idle') {
+                                if (typeof window.endChat === 'function' && isCallActive()) {
+                                    window.endChat();
+                                }
+                                navigateToDailyCare();
+                                return;
+                            }
+
+                            pendingSuccessTaskId = null;
+                            _postCallFetchInFlight = true;
+                            hideRequestLoading();
+                            BedContext.go('Home/Index');
+                        });
                     }
-
-                    pendingSuccessTaskId = null;
-                    _postCallFetchInFlight = true; 
-                    hideRequestLoading();
-
-                    var urlParams = new URLSearchParams(window.location.search);
-                    var bedInfo = urlParams.get('BedInfo') || sessionStorage.getItem('bedInfo');
-                    if (bedInfo) {
-                        window.location.href = '/Home/Index?BedInfo=' + encodeURIComponent(bedInfo);
-                    } else {
-                        window.history.back();
-                    }
-                });
-            }
         });
 
         function navigateToDailyCare() {
@@ -1919,13 +1926,32 @@
             window.scrollTo(0, 0);
         }
 
+        // function DailCareRedirect(RedirectURL) {
+        //     var b = BedContext.get();
+        //     if (!b.bedInfo) return;
+        //     var url = RedirectURL + encodeURIComponent(b.bedInfo)
+        //         + '&region=' + encodeURIComponent(b.region || 'IN');
+        //     if (window.UnifiedAIChild) {
+        //         window.UnifiedAIChild.navigate(url);
+        //     } else {
+        //         window.location.href = url;
+        //     }
+        // }
+
         function DailCareRedirect(RedirectURL) {
             var b = BedContext.get();
             if (!b.bedInfo) return;
             var url = RedirectURL + encodeURIComponent(b.bedInfo)
                 + '&region=' + encodeURIComponent(b.region || 'IN');
-            if (window.UnifiedAIChild) {
+            if (b.tenantId) {
+                url += '&XTenantID=' + encodeURIComponent(b.tenantId);
+            }
+            var isFrame = @(isUnifiedAIFrame ? "true" : "false");
+            if (window.UnifiedAIChild && typeof window.UnifiedAIChild.navigate === 'function') {
                 window.UnifiedAIChild.navigate(url);
+            } else if (isFrame) {
+                var sep = url.indexOf('?') > -1 ? '&' : '?';
+                window.location.href = url + sep + 'Unified=1&UnifiedAI=1';
             } else {
                 window.location.href = url;
             }
@@ -1955,36 +1981,51 @@
         }
 
         function openVideoOverlay(videoUrlOrList, title) {
-            var overlay = document.getElementById('videoOverlay');
-            var body    = document.getElementById('videoModalBody');
-            var links   = [];
+                    var raw = Array.isArray(videoUrlOrList)
+                        ? videoUrlOrList.join(" ")
+                        : String(videoUrlOrList || "").trim();
+                    if (!raw && !title) return;
 
-            if (Array.isArray(videoUrlOrList)) {
-                links = videoUrlOrList;
-            } else if (typeof videoUrlOrList === 'string') {
-                links = videoUrlOrList.trim().split(/\s+/).filter(function (u) {
-                    return u && u.indexOf('http') === 0;
-                });
-            }
+                    if (pendingSuccessTaskId) {
+                        try {
+                            var bedKey = getTaskBedId() || getTaskBedNumber() || "unknown";
+                            sessionStorage.setItem("pendingSuccessTaskId_" + bedKey, pendingSuccessTaskId);
+                        } catch (e) { }
+                    }
 
-            if (links.length === 0) return;
+                    try {
+                        sessionStorage.setItem("pendingLibraryVideo", JSON.stringify({
+                            videoUrl: raw,
+                            title: title || ""
+                        }));
+                    } catch (e) { }
 
-            body.innerHTML = '';
-            links.forEach(function (link) {
-                var embedUrl = convertToEmbedUrl(link);
-                var frame = document.createElement('div');
-                frame.className = 'video-frame';
-                frame.innerHTML =
-                    '<iframe src="' + embedUrl + '" ' +
-                    'frameborder="0" ' +
-                    'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" ' +
-                    'allowfullscreen></iframe>';
-                body.appendChild(frame);
-            });
+                    if (window.UnifiedAIChild && typeof window.UnifiedAIChild.navigate === "function") {
+                        var childUrl = window.BedContext && window.BedContext.url
+                            ? window.BedContext.url("MyLibrary/Index", { playVideo: raw, videoTitle: title || "" })
+                            : "/MyLibrary/Index?playVideo=" + encodeURIComponent(raw)
+                                + "&videoTitle=" + encodeURIComponent(title || "");
+                        window.UnifiedAIChild.navigate(childUrl);
+                        return;
+                    }
 
-            overlay.classList.add('show');
-            document.body.style.overflow = 'hidden';
-        }
+                    if (isUnifiedAIFrame) {
+                        var frameUrl = window.BedContext && window.BedContext.url
+                            ? window.BedContext.url("MyLibrary/Index", { playVideo: raw, videoTitle: title || "" })
+                            : "/MyLibrary/Index?playVideo=" + encodeURIComponent(raw)
+                                + "&videoTitle=" + encodeURIComponent(title || "");
+                        var sep = frameUrl.indexOf("?") > -1 ? "&" : "?";
+                        window.location.href = frameUrl + sep + "Unified=1&UnifiedAI=1";
+                        return;
+                    }
+
+                    if (window.BedContext && typeof window.BedContext.go === "function") {
+                        BedContext.go("MyLibrary/Index", { playVideo: raw, videoTitle: title || "" });
+                    } else {
+                        window.location.href = "/MyLibrary/Index?playVideo=" + encodeURIComponent(raw)
+                            + "&videoTitle=" + encodeURIComponent(title || "");
+                    }
+                }
 
         function closeVideoOverlay() {
             var overlay = document.getElementById('videoOverlay');

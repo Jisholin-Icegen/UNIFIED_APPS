@@ -37,7 +37,7 @@ function closeModal() {
 }
 
 function DailCareRedirect(RedirectURL) {
-    window.location.href = RedirectURL;
+    navigateFoodPage(RedirectURL);
 }
 
 function browseOtherMeals() {
@@ -112,6 +112,31 @@ function setSpecialInstruction(val) {
 var allMenuItems = allMenuItems || [];
 var currentCart = currentCart || {};
 
+function finishUnifiedFoodAction(success, result, error) {
+    var action = window.__unifiedAIFoodAction;
+    if (!action || !window.UnifiedAIChild) return;
+    window.__unifiedAIFoodAction = null;
+    sessionStorage.removeItem("UnifiedAIPendingFoodSubmit");
+    window.UnifiedAIChild.respond(action, success, result, error);
+}
+
+function preserveUnifiedAI(url) {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get("UnifiedAI") !== "1" && params.get("Unified") !== "1") return url;
+    var target = new URL(url, window.location.origin);
+    target.searchParams.set("Unified", "1");
+    target.searchParams.set("UnifiedAI", "1");
+    return target.toString();
+}
+
+function navigateFoodPage(url) {
+    if (window.UnifiedAIChild) {
+        window.UnifiedAIChild.navigate(url);
+    } else {
+        window.location.href = preserveUnifiedAI(url);
+    }
+}
+
 function getRoomBed() {
     return sessionStorage.getItem('RoomBed')
         || sessionStorage.getItem('bedInfo')
@@ -126,23 +151,24 @@ function addToOrder(id, specificMealType) {
     if (!currentCart) { currentCart = {}; }
 
     if (currentCart[cartKey]) {
-        changeQty(id, 1, mealType);
-        return;
+        return changeQty(id, 1, mealType);
     }
 
     var item = allMenuItems.find(x => x.id == id);
-    if (!item) return;
+    if (!item) return null;
 
     currentCart[cartKey] = {
         id: item.id,
         mealType: mealType,
         name: item.foodName,
         itemDesc: item.description || "",
-        calories: item.calories, 
+        calories: parseInt(item.calories) || 0,
+        price: parseFloat(item.price) || 0,
+        dietaryType: item.dietaryType || '',
         qty: 1
     };
 
-    SaveCartToDatabase(currentCart[cartKey]);
+    var saveRequest = SaveCartToDatabase(currentCart[cartKey]);
 
     $(`#add-btn-${sanitizedId}`).hide();
     $(`#qty-selector-${sanitizedId}`).css("display", "inline-flex");
@@ -151,6 +177,7 @@ function addToOrder(id, specificMealType) {
     updateReviewBar();
     const translatedName = i18n.t(item.foodName, item.foodName);
     showCancelToast(translatedName + " added to cart");
+    return saveRequest;
 }
 
 function LoadCartFromDatabase() {
@@ -159,7 +186,7 @@ function LoadCartFromDatabase() {
 
     if (!roomNo) return;
 
-    $.get('/FoodDining/GetCartItems', { roomNo: roomNo }, function (data) {
+    return $.get('/FoodDining/GetCartItems', { roomNo: roomNo }, function (data) {
         currentCart = {};
 
         if (data) {
@@ -171,6 +198,9 @@ function LoadCartFromDatabase() {
                     mealType: item.mealType,
                     name: item.itemName,
                     itemDesc: item.itemDesc,
+                    calories: item.quantity > 0 ? Math.round((parseInt(item.calories) || 0) / item.quantity) : 0,
+                    price: parseFloat(item.price) || 0,
+                    dietaryType: item.dietaryType || '',
                     qty: item.quantity
                 };
                 if (item.mealType.toLowerCase() === activeTabMealType.toLowerCase()) {
@@ -193,15 +223,16 @@ function changeQty(id, delta, specificMealType) {
     const cartKey = id + "_" + mealType;
     const sanitizedId = (id + "_" + mealType).replace(/\s+/g, '_');
 
-    if (!currentCart[cartKey]) return;
+    if (!currentCart[cartKey]) return null;
     const itemName = currentCart[cartKey].name || "Item";
+    let saveRequest;
 
     const baseCalories = parseInt(currentCart[cartKey].calories) || 0;
 
     currentCart[cartKey].qty += delta;
 
     if (currentCart[cartKey].qty <= 0) {
-        $.post('/FoodDining/DeleteCartItem', {
+        saveRequest = $.post('/FoodDining/DeleteCartItem', {
             roomNo: getRoomBed(),
             itemId: id,
             mealType: mealType
@@ -216,8 +247,12 @@ function changeQty(id, delta, specificMealType) {
         showCancelToast(translatedName + " removed");
 
     } else {
-        SaveCartToDatabase(currentCart[cartKey]);
+        saveRequest = SaveCartToDatabase(currentCart[cartKey]);
         $(`#qty-count-${sanitizedId}`).text(currentCart[cartKey].qty);
+        const c = currentCart[cartKey];
+        if (c.price) {
+            $(`#row-price-${sanitizedId}`).text('$' + (c.price * c.qty).toFixed(2));
+        }
         if ($(`#cal-count-${sanitizedId}`).length) {
             const newTotalCals = baseCalories * currentCart[cartKey].qty;
             $(`#cal-count-${sanitizedId}`).text(newTotalCals);
@@ -233,6 +268,7 @@ function changeQty(id, delta, specificMealType) {
     }
 
     updateReviewBar();
+    return saveRequest;
 }
 
 function SaveCartToDatabase(item) {
@@ -245,15 +281,53 @@ function SaveCartToDatabase(item) {
         Quantity: item.qty,
         OrderType: $("#hdnOrderType").val(),
         MealType: item.mealType,
-        Calories: totalCalories
+        Calories: totalCalories,
+        Price: item.price || 0,
+        DietaryType: item.dietaryType || ''
     };
 
-    $.ajax({
+    return $.ajax({
         url: '/FoodDining/SaveCartItem',
         type: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(payload)
     });
+}
+function getItemMeta(id) {
+    try { return (JSON.parse(localStorage.getItem('MenuMeta') || '{}'))[String(id)] || {}; }
+    catch (e) { return {}; }
+}
+
+function dietInfo(d) {
+    d = (d || '').toLowerCase();
+    if (d.includes('non')) return { cls: 'nonveg', label: 'NON-VEG', icon: 'fa-drumstick-bite' };
+    if (d.includes('vegan')) return { cls: 'vegan', label: 'VEGAN', icon: 'fa-seedling' };
+    return { cls: 'veg', label: 'VEG', icon: 'fa-leaf' };
+}
+
+function renderOrderSummary() {
+    const isVisitor = isVisitorOrder();
+    let count = 0, veg = 0, nonVeg = 0, total = 0;
+
+    Object.values(currentCart || {}).forEach(it => {
+        const q = parseInt(it.qty, 10) || 0;
+        const p = parseFloat(it.price) || 0;
+        count += q;
+        total += p * q;
+        if (dietInfo(it.dietaryType).cls === 'nonveg') nonVeg += q; else veg += q;
+    });
+
+    $("#sumItemCount").text(count);
+    $("#sumVegCount").text(veg);
+    $("#sumNonVegCount").text(nonVeg);
+
+    if (isVisitor) {
+        $("#sumSubtotal, #sumGrandTotal").text("$" + total.toFixed(2));
+        $("#orderTotalCard .visitor-only").show();
+    } else {
+        $("#orderTotalCard .visitor-only").hide();
+    }
+    $("#orderTotalCard").toggle(count > 0);
 }
 
 function updateReviewBar() {
@@ -264,6 +338,8 @@ function updateReviewBar() {
             return sum + (parseInt(item.qty) || 0);
         }, 0);
     }
+
+    if (typeof renderOrderSummary === 'function' && $("#orderTotalCard").length) renderOrderSummary();
 
     $("#total-cart-count").text(totalItems);
     $("#review-total-count").text(totalItems);
@@ -302,9 +378,9 @@ function renderReviewItems() {
     const roomNo = getRoomBed();
     const mode = $("#hdnMealOrderType").val();
 
-    if (!roomNo) return;
+    if (!roomNo) return $.Deferred().reject(new Error("Room information is unavailable.")).promise();
 
-    $.ajax({
+    return $.ajax({
         url: '/FoodDining/GetCartItems',
         type: 'GET',
         data: { roomNo: roomNo },
@@ -350,6 +426,9 @@ function renderReviewItems() {
             else {
                 showEmptyCartUI();
             }
+        },
+        error: function () {
+            showEmptyCartUI();
         }
     });
 }
@@ -362,50 +441,72 @@ function showEmptyCartUI() {
     updateReviewBar();
 }
 
+function isVisitorOrder() {
+    const hdn = ($("#hdnOrderType").val() || '').toLowerCase();
+    if (hdn) return hdn === 'visitor';
+    return Object.values(currentCart || {}).some(i => (i.orderType || '').toLowerCase() === 'visitor');
+}
+
 function getCartItemRowHtml(item, isStandalone = false) {
     const cartKey = item.itemId + "_" + item.mealType;
-    const sanitizedId = (item.itemId + "_" + item.mealType).replace(/\s+/g, '_');
+    const sid = (item.itemId + "_" + item.mealType).replace(/\s+/g, '_');
+    const meta = getItemMeta(item.itemId);
 
-    const totalCaloriesFromDB = parseInt(item.calories || item.Calories) || 0;
-
-    const baseCalories = totalCaloriesFromDB > 0 ? Math.round(totalCaloriesFromDB / item.quantity) : 0;
+    const totalCal = parseInt(item.calories || item.Calories) || 0;
+    const baseCal = totalCal > 0 ? Math.round(totalCal / item.quantity) : 0;
+    const price = parseFloat(item.price) || 0;
+    const dietType = item.dietaryType || '';
+    const imgPath = meta.imagePath || '';
 
     currentCart[cartKey] = {
-        id: item.itemId,
-        mealType: item.mealType,
-        name: item.itemName,
-        itemDesc: item.itemDesc,
-        calories: baseCalories,
-        qty: item.quantity
+        id: item.itemId, mealType: item.mealType, name: item.itemName,
+        itemDesc: item.itemDesc, calories: baseCal,
+        price: price, dietaryType: dietType,
+        orderType: item.orderType, qty: item.quantity
     };
 
-    return `
-        <div class="${isStandalone ? 'review-item-card' : 'review-item-row-inner'}" id="card-${sanitizedId}">
-            <div class="item-img-box"><img src="/images/defaultfood.png" style="width:45px;" /></div>
-            
-            <div class="item-details">
-                <h3>${i18n.t(item.itemName, item.itemName)}</h3>
-                <p>${item.itemDesc || ''}</p>
-                
-                ${totalCaloriesFromDB > 0 ? `
-                <div class="item-calories-row" id="cal-row-${sanitizedId}">
-                    <i class="fa-solid fa-fire"></i> 
-                    <span id="cal-count-${sanitizedId}">${totalCaloriesFromDB}</span> cal
-                </div>` : ''}
+    const isVisitor = (item.orderType || $("#hdnOrderType").val() || '').toLowerCase() === 'visitor';
 
+    const hasPhoto = imgPath && !/defaultfood/i.test(imgPath);
+    const img = hasPhoto ? imgPath : '/images/defaultfood.png';
+    const d = dietInfo(dietType);
+
+    const priceBlock = (isVisitor && price > 0) ? `
+        <div class="rv-price">
+            <span class="rv-unit">$${price.toFixed(2)} each</span>
+            <span class="rv-line" id="row-price-${sid}">$${(price * item.quantity).toFixed(2)}</span>
+        </div>` : '';
+
+    return `
+    <div class="rv-card" id="card-${sid}">
+            <div class="rv-img ${hasPhoto ? 'has-photo' : 'no-photo'}">
+                ${hasPhoto
+                        ? `<img src="${img}" alt="" onerror="this.outerHTML='<i class=\\'fa-solid fa-utensils rv-ph\\'></i>'; " />`
+                        : `<i class="fa-solid fa-utensils rv-ph"></i>`}
+                <span class="rv-diet-dot ${d.cls}"><i class="fa-solid ${d.icon}"></i></span>
             </div>
-            
-            <div class="qty-selector-v2">
-                <button class="qty-btn-v2 minus" onclick="changeQty('${item.itemId}', -1, '${item.mealType}')">−</button>
-                <span class="qty-count-v2" id="qty-count-${sanitizedId}">${item.quantity}</span>
-                <button class="qty-btn-v2 plus" onclick="changeQty('${item.itemId}', 1, '${item.mealType}')">+</button>
-            </div>
-            <div class="item-remove">
-                <button class="btn-remove" onclick="changeQty('${item.itemId}', -${item.quantity}, '${item.mealType}')">
-                    <img src="/images/Delete.png" style="width:18px;" />
+            <div class="rv-body">
+            <div class="rv-top">
+                <h3 class="rv-title cart-item-title">${i18n.t(item.itemName, item.itemName)}</h3>
+                <button class="rv-del" onclick="changeQty('${item.itemId}', -${item.quantity}, '${item.mealType}')">
+                    <i class="fa-regular fa-trash-can"></i>
                 </button>
             </div>
-        </div>`;
+            <p class="rv-desc">${item.itemDesc || ''}</p>
+            <div class="rv-tags">
+                <span class="diet-chip ${d.cls}">${d.label}</span>
+                ${totalCal > 0 ? `<span class="rv-cal"><i class="fa-solid fa-fire"></i> <span id="cal-count-${sid}">${totalCal}</span> cal</span>` : ''}
+            </div>
+            <div class="rv-bottom">
+                <div class="qty-selector-v2">
+                    <button class="qty-btn-v2 minus" onclick="changeQty('${item.itemId}', -1, '${item.mealType}')">−</button>
+                    <span class="qty-count-v2" id="qty-count-${sid}">${item.quantity}</span>
+                    <button class="qty-btn-v2 plus" onclick="changeQty('${item.itemId}', 1, '${item.mealType}')">+</button>
+                </div>
+                ${priceBlock}
+            </div>
+        </div>
+    </div>`;
 }
 
 function updateDynamicHeader() {
@@ -534,7 +635,9 @@ function parseOrderDate(value) {
 
     return formatIsoDate(new Date());
 }
-function submitReviewWithAJAX() {
+function submitReviewWithAJAX(deferUnifiedActionResult) {
+    if (window.__foodReviewPreparing) return;
+    window.__foodReviewPreparing = true;
     var reviewData = {
         orderType: $("#hdnOrderType").val(),
         mode: $("#hdnMealOrderType").val(),
@@ -548,16 +651,31 @@ function submitReviewWithAJAX() {
         data: reviewData,
         success: function (response) {
             if (response.success) {
-                window.location.href = response.redirectUrl;
+                if (!deferUnifiedActionResult) finishUnifiedFoodAction(true, { reviewReady: true });
+                window.location.href = preserveUnifiedAI(response.redirectUrl);
+            } else {
+                finishUnifiedFoodAction(false, null, "Could not prepare the order review.");
             }
         },
         error: function () {
+            finishUnifiedFoodAction(false, null, "Could not prepare the order review.");
             alert("Error preparing order review.");
+        },
+        complete: function () {
+            window.__foodReviewPreparing = false;
         }
     });
 }
 
 function submitFinalOrder() {
+    if (window.__foodOrderSubmitting) return;
+    if (!currentCart || !Object.keys(currentCart).some(function (key) {
+        return Number(currentCart[key] && currentCart[key].qty) > 0;
+    })) {
+        finishUnifiedFoodAction(false, null, "The cart is empty.");
+        return;
+    }
+
     let roomNo = getRoomBed();
     let specialInstruction = localStorage.getItem("SpecialInstruction") || "";
     let mealType = $("#hdnMealType").val();
@@ -567,15 +685,18 @@ function submitFinalOrder() {
     orddate = parseOrderDate(rawDate);
 
     if (!orddate) {
+        finishUnifiedFoodAction(false, null, "Invalid order date.");
         alert("Invalid order date.");
         return;
     }
 
     if (!roomNo) {
+        finishUnifiedFoodAction(false, null, "Room information is missing.");
         alert("Room information missing. Please rescan your QR code.");
         return;
     }
 
+    window.__foodOrderSubmitting = true;
     let isPreorder = (mode === "preorder") ? 1 : 0;
     let totalCalories = 0;
     if (typeof currentCart !== 'undefined' && currentCart) {
@@ -583,7 +704,9 @@ function submitFinalOrder() {
             totalCalories += (parseInt(item.calories) || 0) * (parseInt(item.qty) || 0);
         });
     }
-    $("#reviewOrderBar").find("button").html('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
+    $("#confirmOrderBar, #reviewOrderBar").find("button")
+        .prop("disabled", true)
+        .html('<i class="fa-solid fa-spinner fa-spin"></i> Processing...');
 
     $.ajax({
         url: "/FoodDining/SubmitOrder",
@@ -596,6 +719,7 @@ function submitFinalOrder() {
             Calories: totalCalories
         },
         success: function (res) {
+            window.__foodOrderSubmitting = false;
             if (res.success) {
                 localStorage.removeItem("SpecialInstruction");
                 localStorage.setItem("ShowOrderSuccessToast", "true");
@@ -604,12 +728,18 @@ function submitFinalOrder() {
                 var url = "/FoodDining/OrderSuccess?orderIds=" + res.orderIds + "&isPreorder=" + isPreorder;
                 if (bedInfo) url += "&BedInfo=" + encodeURIComponent(bedInfo);
 
-                window.location.href = url;
+                finishUnifiedFoodAction(true, { orderIds: res.orderIds });
+                window.location.href = preserveUnifiedAI(url);
             } else {
+                $("#confirmOrderBar, #reviewOrderBar").find("button").prop("disabled", false);
+                finishUnifiedFoodAction(false, null, res.message || "Order failed.");
                 alert(res.message || "Order failed");
             }
         },
         error: function () {
+            window.__foodOrderSubmitting = false;
+            $("#confirmOrderBar, #reviewOrderBar").find("button").prop("disabled", false);
+            finishUnifiedFoodAction(false, null, "Order submission failed.");
             alert("Order submission failed.");
         }
     });
@@ -817,7 +947,7 @@ function processCancel(orderId, mealName) {
                 var b = sessionStorage.getItem('bedInfo') || '';
                 $(`#action-area-${orderId}`).html(`
                     <button class="btn-view-details-full" 
-                            onclick="window.location.href='/FoodDining/OrderSuccess?orderIds=${orderId}&isPreorder=1${b ? '&BedInfo=' + encodeURIComponent(b) : ''}'">
+                            onclick="navigateFoodPage('/FoodDining/OrderSuccess?orderIds=${orderId}&isPreorder=1${b ? '&BedInfo=' + encodeURIComponent(b) : ''}')">
                         View details
                     </button>
                 `);
@@ -896,9 +1026,9 @@ function loadOrdersDashboard(roomNo) {
             </div>
             <div class="action-container" id="action-area-${order.orderId}">
                 ${isCancelled ?
-                            `<button class="btn-view-details-full" onclick="window.location.href='/FoodDining/OrderSuccess?orderIds=${order.orderId}&isPreorder=1${bedQuery}'">View details</button>` :
+                            `<button class="btn-view-details-full" onclick="navigateFoodPage('/FoodDining/OrderSuccess?orderIds=${order.orderId}&isPreorder=1${bedQuery}')">View details</button>` :
                             `<div class="card-action-btns">
-                        <button class="btn-outline-details" onclick="window.location.href='/FoodDining/OrderSuccess?orderIds=${order.orderId}&isPreorder=1${bedQuery}'">View details</button>
+                        <button class="btn-outline-details" onclick="navigateFoodPage('/FoodDining/OrderSuccess?orderIds=${order.orderId}&isPreorder=1${bedQuery}')">View details</button>
                         <button class="btn-outline-cancel" onclick="togglePreConfirm('${order.orderId}', true)">Cancel</button>
                     </div>`
                         }
@@ -907,7 +1037,7 @@ function loadOrdersDashboard(roomNo) {
     </div>`;
                 } else {
                     tomorrowHtml += `
-                    <div class="meal-placeholder-card" onclick="window.location.href='/FoodDining/PatientOrderMode?BedInfo=${encodeURIComponent(bedInfo)}'">
+                    <div class="meal-placeholder-card" onclick="navigateFoodPage('/FoodDining/PatientOrderMode?BedInfo=${encodeURIComponent(bedInfo)}')">
                         <div class="placeholder-icon-circle"><i class="fa-solid ${iconClass}"></i></div>
                         <div class="placeholder-content">
                             <strong>${m.type.toUpperCase()}</strong><span>${m.time}</span>
@@ -1040,7 +1170,7 @@ function loadOrdersDashboard(roomNo) {
                             }
 
                             let trackButtonHtml = (!isDelivered && !isActuallyCancelled)
-                                ? `<button class="btn-track-modern" onclick="window.location.href='/FoodDining/OrderSuccess?orderIds=${order.orderId}${bedQuery}'">
+                                ? `<button class="btn-track-modern" onclick="navigateFoodPage('/FoodDining/OrderSuccess?orderIds=${order.orderId}${bedQuery}')">
                                        <i class="fa-solid fa-stopwatch"></i> Track
                                    </button>`
                                 : (isDelivered && isActuallyRated
@@ -1372,7 +1502,7 @@ function RemoveDefaultPreference(itemId) {
                 if (!bedInfo) return;
 
                 var base = (page === 'FoodDining') ? '/FoodDining/FoodDining' : '/' + page;
-                window.location.href = base + '?BedInfo=' + encodeURIComponent(bedInfo);
+                navigateFoodPage(base + '?BedInfo=' + encodeURIComponent(bedInfo));
             });
         });
     }

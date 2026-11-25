@@ -20,6 +20,7 @@ wwwroot\css\responsive.css
 wwwroot\css\Room.css
 wwwroot\css\site.css
 wwwroot\css\Tracking.css
+wwwroot\css\unified-ai-transitions.css
 wwwroot\css\unified-ai.css
 wwwroot\css\voice-agent\styles.css
 wwwroot\data\region-language.json
@@ -464,4 +465,10 @@ wwwroot\locales\ur.json
 wwwroot\locales\zh.json
 wwwroot\manifest.json
 wwwroot\models\silero-vad.onnx
+wwwroot\Mydailycarevideos\Ambulance.mp4
+wwwroot\Mydailycarevideos\Bones.mp4
+wwwroot\Mydailycarevideos\Eye Checkup.mp4
+wwwroot\Mydailycarevideos\Health.mp4
+wwwroot\Mydailycarevideos\Machine.mp4
 wwwroot\sw.js
+wwwroot\js\unified-ai-bridge.js

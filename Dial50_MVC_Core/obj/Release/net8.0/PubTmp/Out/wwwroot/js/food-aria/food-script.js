@@ -76,19 +76,29 @@
     }
 
     async function fetchProfileLanguage(id) {
-        if (!id || !PROFILE_API_URL) return null;
+        if (!id || typeof PROFILE_API_URL === 'undefined') return null;
         try {
+            var tenantId = window.BedContext.getTenantId();
+            if (!tenantId) {
+                console.warn("GetProfileOld failed: No TenantId in BedContext");
+                return null;
+            }
+
             var res = await fetch(PROFILE_API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: id, Status: 'GET' })
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Tenant-ID": tenantId
+                },
+                body: JSON.stringify({ userId: String(id) })
             });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+
+            if (!res.ok) throw new Error("HTTP " + res.status);
             var result = await res.json();
             if (!result.status || !result.data || !result.data.Language) return null;
             return result.data.Language;
         } catch (err) {
-            console.warn('[FoodAI] profile fetch failed:', err.message);
+            console.warn("GetProfileOld failed:", err.message);
             return null;
         }
     }

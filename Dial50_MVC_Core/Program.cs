@@ -32,6 +32,7 @@ builder.Services.AddDbContext<ApplicationDbContext>((sp, options) =>
     options.UseSqlServer(tenant.GetConnectionString());
 });
 
+
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
 
@@ -67,6 +68,11 @@ builder.Services.AddControllersWithViews(o => o.Filters.Add<BedContextFilter>())
 
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddScoped<TenantProvider>();
+
+Directory.CreateDirectory(keysFolder);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysFolder))
+    .SetApplicationName("Dial50_MVC_Core");
 
 builder.Services.AddSession(options =>
 {
@@ -110,10 +116,6 @@ app.UseStaticFiles(new StaticFileOptions
 });
 app.UseRequestLocalization(app.Services.GetRequiredService<IOptions<RequestLocalizationOptions>>().Value);
 
-// Unified AI: a page that loads INSIDE the Home iframe must always behave as a Unified child page,
-// even when a script navigation or a redirect dropped ?UnifiedAI=1 from the URL. Without the flag
-// the page sends no context to the AI and cannot run voice actions. Browsers label such requests
-// with "Sec-Fetch-Dest: iframe", so we put the flag back before the views read the query string.
 app.Use(async (context, next) =>
 {
     if (string.Equals(context.Request.Headers["Sec-Fetch-Dest"].ToString(), "iframe", StringComparison.OrdinalIgnoreCase)
@@ -148,6 +150,7 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
 
 app.MapControllers();
 app.MapControllerRoute(

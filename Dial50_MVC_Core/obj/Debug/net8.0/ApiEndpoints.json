@@ -1,6 +1,94 @@
 [
   {
     "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
+    "Method": "BedActions",
+    "RelativePath": "api/ai-bridge/bed/{bedId}/actions",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "bedId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "body",
+        "Type": "Dial50_MVC_Core.Controllers.AiActionsPost",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
+    "Method": "BedConfirmations",
+    "RelativePath": "api/ai-bridge/bed/{bedId}/confirmations",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "bedId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "after_seq",
+        "Type": "System.Nullable\u00601[[System.Int64, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
+    "Method": "BedOptions",
+    "RelativePath": "api/ai-bridge/bed/{bedId}/options",
+    "HttpMethod": "GET",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "bedId",
+        "Type": "System.String",
+        "IsRequired": true
+      },
+      {
+        "Name": "include_raw",
+        "Type": "System.Boolean",
+        "IsRequired": false
+      },
+      {
+        "Name": "after_seq",
+        "Type": "System.Nullable\u00601[[System.Int64, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "compact",
+        "Type": "System.Nullable\u00601[[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "since_version",
+        "Type": "System.Nullable\u00601[[System.Int64, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "limit",
+        "Type": "System.Nullable\u00601[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]",
+        "IsRequired": false
+      },
+      {
+        "Name": "include_items",
+        "Type": "System.Boolean",
+        "IsRequired": false
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
     "Method": "Health",
     "RelativePath": "api/ai-bridge/health",
     "HttpMethod": "GET",
@@ -11,24 +99,8 @@
   },
   {
     "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
-    "Method": "ListSessions",
-    "RelativePath": "api/ai-bridge/sessions",
-    "HttpMethod": "GET",
-    "IsController": true,
-    "Order": 0,
-    "Parameters": [
-      {
-        "Name": "bed_id",
-        "Type": "System.String",
-        "IsRequired": false
-      }
-    ],
-    "ReturnTypes": []
-  },
-  {
-    "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
-    "Method": "PostActions",
-    "RelativePath": "api/ai-bridge/sessions/{sessionId}/actions",
+    "Method": "PostConfirmation",
+    "RelativePath": "api/ai-bridge/sessions/{sessionId}/confirmations",
     "HttpMethod": "POST",
     "IsController": true,
     "Order": 0,
@@ -40,8 +112,8 @@
       },
       {
         "Name": "body",
-        "Type": "Dial50_MVC_Core.Controllers.AiActionsPost",
-        "IsRequired": true
+        "Type": "Dial50_MVC_Core.Controllers.AiConfirmationPost",
+        "IsRequired": false
       }
     ],
     "ReturnTypes": []
@@ -70,48 +142,6 @@
   },
   {
     "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
-    "Method": "GetOptions",
-    "RelativePath": "api/ai-bridge/sessions/{sessionId}/options",
-    "HttpMethod": "GET",
-    "IsController": true,
-    "Order": 0,
-    "Parameters": [
-      {
-        "Name": "sessionId",
-        "Type": "System.String",
-        "IsRequired": true
-      },
-      {
-        "Name": "include_raw",
-        "Type": "System.Boolean",
-        "IsRequired": false
-      }
-    ],
-    "ReturnTypes": []
-  },
-  {
-    "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
-    "Method": "GetResults",
-    "RelativePath": "api/ai-bridge/sessions/{sessionId}/results",
-    "HttpMethod": "GET",
-    "IsController": true,
-    "Order": 0,
-    "Parameters": [
-      {
-        "Name": "sessionId",
-        "Type": "System.String",
-        "IsRequired": true
-      },
-      {
-        "Name": "after",
-        "Type": "System.Int64",
-        "IsRequired": false
-      }
-    ],
-    "ReturnTypes": []
-  },
-  {
-    "ContainingType": "Dial50_MVC_Core.Controllers.AiBridgeController",
     "Method": "PostResult",
     "RelativePath": "api/ai-bridge/sessions/{sessionId}/results",
     "HttpMethod": "POST",
@@ -126,7 +156,7 @@
       {
         "Name": "body",
         "Type": "Dial50_MVC_Core.Controllers.AiResultPost",
-        "IsRequired": true
+        "IsRequired": false
       }
     ],
     "ReturnTypes": []
@@ -147,7 +177,7 @@
       {
         "Name": "body",
         "Type": "Dial50_MVC_Core.Controllers.AiScreenPush",
-        "IsRequired": true
+        "IsRequired": false
       }
     ],
     "ReturnTypes": []

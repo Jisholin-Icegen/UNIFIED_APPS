@@ -16,7 +16,9 @@
     body:not([data-state]) #callLayer,
     body:not([data-state]) #endedLayer,
     body:not([data-state]) .call-layer,
-    body:not([data-state]) .ended-layer {
+    body:not([data-state]) .ended-layer,
+    body[data-call-presentation="minimized"] #endedLayer,
+    body[data-call-presentation="minimized"] .ended-layer {
         display: none !important;
     }
 
@@ -2055,10 +2057,11 @@
                         </div>
                     </div>
                     <h2 class="call-title" id="callTitle">Dial50 Demo Hospital</h2>
-                    <div class="call-status-row">
-                        <span class="status-dot"></span>
-                        <span class="call-status-text" id="callStatus">Connecting voice / audio...</span>
-                    </div>
+                <div class="call-status-row">
+                    <span class="status-dot"></span>
+                    <span class="call-status-text" id="callStatus">Connecting voice / audio...</span>
+                </div>
+                <div class="call-timer" id="sessionTimer" aria-label="Call time">00:00</div>
                     <div class="call-controls">
                         <div class="control-btn-wrap">
                             <button type="button" class="control-btn" id="micBtn" aria-label="Mute microphone">
@@ -2254,7 +2257,10 @@
             <img src="~/images/avatar.png" alt="" />
             <span class="unified-ai-bar-copy">
                 <strong>Thara AI Assistant</strong>
-                <span id="unifiedAiBarStatus">Ready</span>
+                <span class="unified-ai-bar-line">
+                    <span id="unifiedAiBarStatus">Ready</span>
+                    <span class="unified-ai-bar-timer" id="unifiedAiBarTimer" hidden>00:00</span>
+                </span>
             </span>
         </button>
         <button type="button" id="unifiedAiBarMicButton" aria-label="Mute microphone">
@@ -2413,36 +2419,41 @@
         }
 
         function openVideoOverlay(videoUrlOrList, title) {
-            var overlay = document.getElementById('videoOverlay');
-            var body    = document.getElementById('videoModalBody');
-            var links   = [];
+                    var raw = Array.isArray(videoUrlOrList)
+                        ? videoUrlOrList.join(" ")
+                        : String(videoUrlOrList || "").trim();
+                    if (!raw && !title) return;
 
-            if (Array.isArray(videoUrlOrList)) {
-                links = videoUrlOrList;
-            } else if (typeof videoUrlOrList === 'string') {
-                links = videoUrlOrList.trim().split(/\s+/).filter(function (u) {
-                    return u && u.indexOf('http') === 0;
-                });
-            }
+                    if (window.UnifiedAIHost && typeof window.UnifiedAIHost.isCallActive === "function" && window.UnifiedAIHost.isCallActive()) {
+                        window.UnifiedAIHost.handleAction({
+                            action: "video.play",
+                            videoUrl: raw,
+                            title: title || ""
+                        });
+                        return;
+                    }
 
-            if (links.length === 0) return;
+                    if (pendingSuccessTaskId) {
+                        try {
+                            var bedKey = getTaskBedId() || getTaskBedNumber() || "unknown";
+                            sessionStorage.setItem("pendingSuccessTaskId_" + bedKey, pendingSuccessTaskId);
+                        } catch (e) { }
+                    }
 
-            body.innerHTML = '';
-            links.forEach(function (link) {
-                var embedUrl = convertToEmbedUrl(link);
-                var frame = document.createElement('div');
-                frame.className = 'video-frame';
-                frame.innerHTML =
-                    '<iframe src="' + embedUrl + '" ' +
-                    'frameborder="0" ' +
-                    'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" ' +
-                    'allowfullscreen></iframe>';
-                body.appendChild(frame);
-            });
+                    try {
+                        sessionStorage.setItem("pendingLibraryVideo", JSON.stringify({
+                            videoUrl: raw,
+                            title: title || ""
+                        }));
+                    } catch (e) { }
 
-            overlay.classList.add('show');
-            document.body.style.overflow = 'hidden';
-        }
+                    if (window.BedContext && typeof window.BedContext.go === "function") {
+                        BedContext.go("MyLibrary/Index", { playVideo: raw, videoTitle: title || "" });
+                    } else {
+                        window.location.href = "/MyLibrary/Index?playVideo=" + encodeURIComponent(raw)
+                            + "&videoTitle=" + encodeURIComponent(title || "");
+                    }
+                }
 
         function closeVideoOverlay() {
             var overlay = document.getElementById('videoOverlay');
@@ -3201,23 +3212,65 @@
                 }
             }
         });
-        document.addEventListener("DOMContentLoaded", function () {
-            const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.type === "attributes" && mutation.attributeName === "data-state") {
-                        const state = document.body.getAttribute('data-state');
-                        if (state === 'connecting' || state === 'connected') {
-                            acquireScreenWakeLock();
-                        }
-                        else if (state === 'idle' || state === 'ended') {
-                            releaseScreenWakeLock();
-                        }
-                    }
-                });
-            });
+        var endedFromOutside = false;
 
-            observer.observe(document.body, { attributes: true });
-        });
+                function exitEndedToIdle() {
+                    endedFromOutside = false;
+                    document.body.removeAttribute("data-call-presentation");
+                    if (typeof window.setState === "function") {
+                        window.setState("idle");
+                    } else {
+                        document.body.setAttribute("data-state", "idle");
+                    }
+                    releaseScreenWakeLock();
+                }
+
+                document.addEventListener("DOMContentLoaded", function () {
+                    var barEndBtn = document.getElementById("unifiedAiBarEndButton");
+                    if (barEndBtn) {
+                        barEndBtn.addEventListener("click", function () {
+                            endedFromOutside = true;
+                        }, true);
+                    }
+
+                    var callEndBtn = document.getElementById("endChatBtn");
+                    if (callEndBtn) {
+                        callEndBtn.addEventListener("click", function () {
+                            endedFromOutside = false;
+                        }, true);
+                    }
+
+                    const observer = new MutationObserver(function(mutations) {
+                        mutations.forEach(function(mutation) {
+                            if (mutation.type === "attributes" && mutation.attributeName === "data-state") {
+                                const state = document.body.getAttribute('data-state');
+                                const isMinimized = document.body.getAttribute('data-call-presentation') === 'minimized';
+
+                                if (state === 'connecting' || state === 'connected') {
+                                    endedFromOutside = false;
+                                    acquireScreenWakeLock();
+                                }
+                                else if (state === 'ended') {
+                                    releaseScreenWakeLock();
+                                    if (isMinimized || endedFromOutside) {
+                                        setTimeout(function () {
+                                            if (document.body.getAttribute('data-state') === 'ended') {
+                                                exitEndedToIdle();
+                                            }
+                                        }, 0);
+                                    }
+                                }
+                                else if (state === 'idle') {
+                                    endedFromOutside = false;
+                                    document.body.removeAttribute("data-call-presentation");
+                                    releaseScreenWakeLock();
+                                }
+                            }
+                        });
+                    });
+
+                    observer.observe(document.body, { attributes: true });
+                });
     </script>
     <script>
         function loadAndOpenStatusModal() {
@@ -3349,4 +3402,3 @@
 <script src="~/js/unified-ai-test.js" asp-append-version="true"></script>
 <script src="~/js/unified-voice-nav.js" asp-append-version="true"></script>
 <script src="~/js/unified-ai-bridge.js" asp-append-version="true"></script>
-
