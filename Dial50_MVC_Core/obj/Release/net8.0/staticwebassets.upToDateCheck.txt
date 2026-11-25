@@ -5,7 +5,7 @@ wwwroot\css\CurrentRequests.css
 wwwroot\css\DailyCare.css
 wwwroot\css\Discharge.css
 wwwroot\css\Feedback.css
-wwwroot\images\pwa\DIAL50.png
+wwwroot\css\Food.css
 wwwroot\css\global.css
 wwwroot\css\login.css
 wwwroot\css\Logistics.css
@@ -20,6 +20,8 @@ wwwroot\css\responsive.css
 wwwroot\css\Room.css
 wwwroot\css\site.css
 wwwroot\css\Tracking.css
+wwwroot\css\unified-ai-transitions.css
+wwwroot\css\unified-ai.css
 wwwroot\css\voice-agent\styles.css
 wwwroot\data\region-language.json
 wwwroot\Default.png
@@ -163,7 +165,8 @@ wwwroot\fonts\noto-sans-sc-latin-wght-normal.woff2
 wwwroot\fonts\noto-sans-sc-vietnamese-wght-normal.woff2
 wwwroot\fonts\noto-sans-tamil-tamil-wght-normal.woff2
 wwwroot\fonts\noto-sans-telugu-telugu-wght-normal.woff2
-wwwroot\js\Food.js
+wwwroot\images\apollo-logo.png
+wwwroot\images\apollo-logo_APOLLO.png
 wwwroot\images\avatar.png
 wwwroot\images\avatar1.png
 wwwroot\images\avatar2.png
@@ -253,6 +256,7 @@ wwwroot\images\default-staff.png
 wwwroot\images\Default.png
 wwwroot\images\defaultfood.png
 wwwroot\images\Delete.png
+wwwroot\images\Dial50-Logo.png
 wwwroot\images\dial_50_logo.png
 wwwroot\images\fd_a.png
 wwwroot\images\fd_b.png
@@ -299,6 +303,12 @@ wwwroot\images\overall_feedback_icon.png
 wwwroot\images\porter.png
 wwwroot\images\Porter\Alex.jpeg
 wwwroot\images\Porter\Default.png
+wwwroot\images\pwa\badge-96.png
+wwwroot\images\pwa\DIAL50.png
+wwwroot\images\pwa\icon-19.png
+wwwroot\images\pwa\icon-192.png
+wwwroot\images\pwa\icon-192_old.png
+wwwroot\images\pwa\notification-bg.png
 wwwroot\images\RequestIcon.png
 wwwroot\images\request_send_ok_icon.png
 wwwroot\images\room_comfort.png
@@ -308,7 +318,8 @@ wwwroot\images\Today_Menu.png
 wwwroot\images\User.png
 wwwroot\images\voice-agent\ai_feedbackavatar.jpg
 wwwroot\images\voice-agent\ai_feedbackavatar2.jpg
-wwwroot\images\Dial50-Logo.png
+wwwroot\images\voice-agent\apollo-logo.png
+wwwroot\images\voice-agent\apollo-logo_APOLLO.png
 wwwroot\images\voice-agent\arrow (2).png
 wwwroot\images\voice-agent\arrow.png
 wwwroot\images\voice-agent\avatar.png
@@ -359,7 +370,7 @@ wwwroot\js\Discharge.js
 wwwroot\js\Feedback.js
 wwwroot\js\food-aria\food-config.js
 wwwroot\js\food-aria\food-script.js
-wwwroot\images\apollo-logo_APOLLO.png
+wwwroot\js\Food.js
 wwwroot\js\jquery-3.7.1.min.js
 wwwroot\js\language-switcher.js
 wwwroot\js\layout.js
@@ -369,16 +380,23 @@ wwwroot\js\Logistics.js
 wwwroot\js\Medication.js
 wwwroot\js\MyLibrary.js
 wwwroot\js\MyRequests.js
-wwwroot\images\apollo-logo.png
+wwwroot\js\notification-mobile.js
 wwwroot\js\PreLoading.js
+wwwroot\js\push-client.js
 wwwroot\js\Room.js
 wwwroot\js\site.js
 wwwroot\js\Tracking.js
+wwwroot\js\unified-ai-bridge.js
+wwwroot\js\unified-ai-child.js
+wwwroot\js\unified-ai-frame.js
+wwwroot\js\unified-ai-host.js
+wwwroot\js\unified-ai-test.js
+wwwroot\js\unified-voice-nav.js
 wwwroot\js\video-ai\config.js
 wwwroot\js\video-ai\video-script.js
 wwwroot\js\voice-agent\config.example.js
 wwwroot\js\voice-agent\config.js
-wwwroot\css\Food.css
+wwwroot\js\voice-agent\script.js
 wwwroot\lib\bootstrap\dist\css\bootstrap-grid.css
 wwwroot\lib\bootstrap\dist\css\bootstrap-grid.css.map
 wwwroot\lib\bootstrap\dist\css\bootstrap-grid.min.css
@@ -447,14 +465,11 @@ wwwroot\locales\pt.json
 wwwroot\locales\ru.json
 wwwroot\locales\ur.json
 wwwroot\locales\zh.json
-wwwroot\images\pwa\icon-192.png
-wwwroot\images\pwa\notification-bg.png
-wwwroot\images\voice-agent\apollo-logo.png
-wwwroot\images\voice-agent\apollo-logo_APOLLO.png
-wwwroot\images\pwa\icon-19.png
-wwwroot\js\notification-mobile.js
-wwwroot\images\pwa\badge-96.png
-wwwroot\js\voice-agent\script.js
 wwwroot\manifest.json
+wwwroot\models\silero-vad.onnx
+wwwroot\Mydailycarevideos\Ambulance.mp4
+wwwroot\Mydailycarevideos\Bones.mp4
+wwwroot\Mydailycarevideos\Eye Checkup.mp4
+wwwroot\Mydailycarevideos\Health.mp4
+wwwroot\Mydailycarevideos\Machine.mp4
 wwwroot\sw.js
-wwwroot\js\push-client.js

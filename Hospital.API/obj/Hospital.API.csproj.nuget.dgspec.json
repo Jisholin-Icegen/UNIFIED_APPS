@@ -1,26 +1,31 @@
 {
   "format": 1,
   "restore": {
-    "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Hospital.API\\Hospital.API.csproj": {}
+    "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Hospital.API\\Hospital.API.csproj": {}
   },
   "projects": {
-    "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Hospital.API\\Hospital.API.csproj": {
+    "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Hospital.API\\Hospital.API.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Hospital.API\\Hospital.API.csproj",
+        "projectUniqueName": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Hospital.API\\Hospital.API.csproj",
         "projectName": "Hospital.API",
-        "projectPath": "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Hospital.API\\Hospital.API.csproj",
-        "packagesPath": "C:\\Users\\JISHOLIN\\.nuget\\packages\\",
-        "outputPath": "E:\\UNIFIED_VOICE_APP\\Experiment\\QR_unified_voice_fixes_v5\\Hospital.API\\obj\\",
+        "projectPath": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Hospital.API\\Hospital.API.csproj",
+        "packagesPath": "C:\\Users\\Icege\\.nuget\\packages\\",
+        "outputPath": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Hospital.API\\obj\\",
         "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
         "configFilePaths": [
-          "C:\\Users\\JISHOLIN\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\Icege\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
-          "C:\\Program Files\\dotnet\\library-packs": {},
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -38,7 +43,8 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.300"
       },
       "frameworks": {
         "net8.0": {
@@ -72,7 +78,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.404/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.315/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

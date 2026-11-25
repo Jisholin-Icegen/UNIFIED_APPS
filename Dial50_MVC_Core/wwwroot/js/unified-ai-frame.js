@@ -4,19 +4,20 @@
     try { underHome = window.parent !== window && !!window.parent.UnifiedAIHost; } catch (error) { underHome = false; }
     if (window.parent === window || (!underHome && params.get("UnifiedAI") !== "1" && params.get("Unified") !== "1")) return;
 
-    // The server flags every iframe page as Unified even if the URL lost ?UnifiedAI=1 (script
-    // navigation / redirect). Put it back in the address so client-side checks keep working.
     if (params.get("UnifiedAI") !== "1") {
         try {
             const fixedUrl = new URL(window.location.href);
             fixedUrl.searchParams.set("Unified", "1");
             fixedUrl.searchParams.set("UnifiedAI", "1");
             window.history.replaceState(window.history.state, "", fixedUrl.toString());
-        } catch (error) { /* ignore */ }
+        } catch (error) { }
     }
 
-    // Content that scripts fill in AFTER the page's entrance animation ended (slow API) gets the same
-    // soft slide-down, so it never just pops in. The header and tab bar are never animated.
+    if (isUnifiedHomePath(window.location.pathname)) {
+        window.parent.postMessage({ type: "unified_ai_show_home" }, window.location.origin);
+        return;
+    }
+
     (function contentEntrance() {
         const started = Date.now();
         function watch(element) {
@@ -25,7 +26,7 @@
             const observer = new MutationObserver(function () {
                 if (element.childElementCount === 0) return;
                 observer.disconnect();
-                if (Date.now() - started < 900) return;          // the CSS entrance is still running
+                if (Date.now() - started < 900) return;
                 element.classList.add("uai-replay");
                 window.setTimeout(function () { element.classList.remove("uai-replay"); }, 650);
             });
@@ -37,6 +38,15 @@
         if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
         else init();
     })();
+
+    const BLOCKED_LABEL_REGEX = /\b(log\s*out|logout|log\s*off|sign\s*out|signout|sign\s*off|end\s*(the\s*)?(call|session)|hang\s*up|disconnect\s*call|delete\s*account|exit\s*app)\b/i;
+    const BLOCKED_ROUTE_REGEX = /^\/(?:account\/)?(?:log-?out|log-?off|sign-?out|log-?in|prelanding)(?:\/|\?|$)/i;
+    const BLOCKED_HINT_REGEX = /log-?out|sign-?out|log-?off|end-?call|hang-?up/i;
+    const ORDER_URL_REGEX = /\/(?:[a-z]*order[a-z]*|place[a-z]*|submit[a-z]*|raise[a-z]*|request[a-z]*|checkout|[a-z]*feedback[a-z]*)(?:[\/?]|$)/i;
+    const ORDER_URL_EXCLUDE_REGEX = /cancel|delete|remove|clear|update|cart|getorder|list|search|load|fetch|status|history|myorders/i;
+
+    let registry = {};
+    let registryCount = 0;
 
     function respond(action, success, result, error) {
         if (!action || !action.request_id) return;
@@ -102,6 +112,16 @@
         return String(value || "").replace(/\s+/g, " ").trim();
     }
 
+    function neutralText(value) {
+        return normalizeText(value).toLowerCase().replace(/[0-9\u20B9$\u20AC\u00A3.,:%]+/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function hashString(value) {
+        let hash = 5381;
+        for (let i = 0; i < value.length; i++) hash = ((hash << 5) + hash + value.charCodeAt(i)) | 0;
+        return (hash >>> 0).toString(36);
+    }
+
     function redactPatientIdentifiers(value) {
         let text = normalizeText(value);
         const context = window.BedContext && window.BedContext.get ? window.BedContext.get() : {};
@@ -154,6 +174,22 @@
         }
     }
 
+    function isBlockedElement(element, label, route) {
+        if (BLOCKED_LABEL_REGEX.test(label || "") || BLOCKED_ROUTE_REGEX.test(String(route || "").trim())) return true;
+        if (!element || !element.getAttribute) return false;
+        const hints = [
+            element.id,
+            element.getAttribute("data-action"),
+            element.getAttribute("href"),
+            element.getAttribute("data-route"),
+            element.getAttribute("onclick"),
+            element.getAttribute("aria-label"),
+            element.getAttribute("title"),
+            typeof element.className === "string" ? element.className : ""
+        ].join(" ");
+        return BLOCKED_HINT_REGEX.test(hints);
+    }
+
     function isDisabled(element) {
         return !!element.disabled || element.getAttribute("aria-disabled") === "true"
             || element.closest("[inert]") !== null;
@@ -185,17 +221,88 @@
         return redactPatientIdentifiers(label).slice(0, 180);
     }
 
-    // Ids describe WHAT a control is (label + target), not WHERE it sits in the list, so an id the
-    // AI received a moment ago still points at the same control after the page changes.
-    function stableId(prefix, element, label, used) {
-        const key = [element.tagName, String(label || ""),
-            element.getAttribute("href") || element.getAttribute("data-route") || element.getAttribute("data-action")
-            || element.id || element.getAttribute("name") || ""].join("|").toLowerCase();
-        let hash = 5381;
-        for (let i = 0; i < key.length; i++) hash = ((hash << 5) + hash + key.charCodeAt(i)) | 0;
-        const base = prefix + (hash >>> 0).toString(36);
+    const SCOPE_ATTRIBUTES = ["data-food-id", "data-category-id", "data-order-id", "data-notification-id", "data-question-id", "data-meal-type"];
+
+    function scopeKey(element) {
+        const scope = element.closest("[" + SCOPE_ATTRIBUTES.join("],[") + "]");
+        if (!scope) return "";
+        return SCOPE_ATTRIBUTES.map(function (name) { return scope.getAttribute(name) || ""; }).join(".");
+    }
+
+    function makeId(prefix, element, label, used, extra) {
+        const strong = [
+            element.id || "",
+            element.getAttribute("data-action") || "",
+            safeRoute(element),
+            element.getAttribute("name") || ""
+        ].join("~");
+        const hasStrong = strong.replace(/~/g, "") !== "";
+        const key = [
+            element.tagName,
+            strong,
+            hasStrong ? "" : neutralText(label),
+            scopeKey(element),
+            extra || ""
+        ].join("|").toLowerCase();
+        const keyHash = hashString(key);
+        const base = prefix + keyHash;
         used[base] = (used[base] || 0) + 1;
-        return used[base] > 1 ? base + "-" + used[base] : base;
+        return { id: used[base] > 1 ? base + "-" + used[base] : base, key: keyHash };
+    }
+
+    function tag(target, attribute, ids) {
+        if (target.getAttribute(attribute) !== ids.id) target.setAttribute(attribute, ids.id);
+        if (target.getAttribute("data-uai-key") !== ids.key) target.setAttribute("data-uai-key", ids.key);
+        if (!registry[ids.id]) {
+            if (registryCount > 800) { registry = {}; registryCount = 0; }
+            registryCount++;
+        }
+        registry[ids.id] = ids.key;
+    }
+
+    function cardName(element) {
+        const parent = element.closest(".menu-card-v2, .rec-card, .service-card, .food-card, .selection-card, .timing-card, .feedback-question, .order-card");
+        const nameElement = parent && parent.querySelector(".food-title, .rec-title, .service-title, .question-text, h3, h4");
+        return redactPatientIdentifiers(normalizeText(nameElement && nameElement.textContent)).slice(0, 60);
+    }
+
+    function foodScope(element) {
+        const food = element.closest("[data-food-id]");
+        if (!food) return null;
+        const mealElement = element.closest("[data-meal-type], [data-mealname]") || food;
+        return {
+            foodId: food.getAttribute("data-food-id") || "",
+            meal: redactPatientIdentifiers(mealElement.getAttribute("data-meal-type") || mealElement.getAttribute("data-mealname") || "")
+        };
+    }
+
+    function cartContext() {
+        const cart = window.currentCart;
+        const lines = [];
+        let count = 0;
+        const hasCartObject = !!cart && typeof cart === "object";
+        if (hasCartObject) {
+            Object.keys(cart).slice(0, 60).forEach(function (key) {
+                const entry = cart[key];
+                const qty = entry ? Number(entry.qty) || 0 : 0;
+                if (qty <= 0) return;
+                count += qty;
+                const parts = key.split("_");
+                lines.push({
+                    foodId: parts[0],
+                    meal: parts.slice(1).join("_"),
+                    qty: qty,
+                    name: redactPatientIdentifiers(entry.name || entry.foodName || entry.title || "").slice(0, 60)
+                });
+            });
+        }
+        const countEl = document.querySelector("#cartCount, .cart-count, [data-cart-count]");
+        const totalEl = document.querySelector("#cartTotal, .cart-total, [data-cart-total]");
+        if (!hasCartObject && !countEl && !totalEl) return null;
+        const summary = { count: count, lines: lines };
+        if (!count && countEl) summary.count = parseInt(String(countEl.textContent || "").replace(/[^0-9]/g, ""), 10) || 0;
+        if (totalEl) summary.total = normalizeText(totalEl.textContent).slice(0, 30);
+        return summary;
     }
 
     function pageContext() {
@@ -221,45 +328,45 @@
                     })
                 };
             });
-            const fields = Array.from(document.querySelectorAll(
-                "input:not([type='hidden']):not([type='password']):not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not([type='file']), textarea, [contenteditable='true']"
-            ))
-                .filter(isVisible)
-                .filter(isSafeField)
-                .slice(0, 50)
-                .map(function (field, index) {
-                    const labels = Array.from(field.labels || []).map(function (label) { return label.textContent; });
-                    const targetId = stableId("unified-field-", field, field.getAttribute("aria-label") || labels.join(" ") || field.getAttribute("placeholder") || field.name || field.id || "", usedIds);
-                    if (field.getAttribute("data-unified-ai-field") !== targetId) {
-                        field.setAttribute("data-unified-ai-field", targetId);
-                    }
-                    return {
-                        targetId: targetId,
-                        type: field.type || (field.isContentEditable ? "contenteditable" : "textarea"),
-                        label: redactPatientIdentifiers(field.getAttribute("aria-label") || labels.join(" ")
-                            || field.getAttribute("placeholder") || field.name || field.id || "Text field"),
-                        placeholder: redactPatientIdentifiers(field.getAttribute("placeholder") || "")
-                    };
-                });
+
+        const fields = Array.from(document.querySelectorAll(
+            "input:not([type='hidden']):not([type='password']):not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not([type='file']), textarea, [contenteditable='true']"
+        ))
+            .filter(isVisible)
+            .filter(isSafeField)
+            .slice(0, 50)
+            .map(function (field) {
+                const labels = Array.from(field.labels || []).map(function (label) { return label.textContent; });
+                const fieldLabel = redactPatientIdentifiers(field.getAttribute("aria-label") || labels.join(" ")
+                    || field.getAttribute("placeholder") || field.name || field.id || "Text field");
+                const ids = makeId("unified-field-", field, fieldLabel, usedIds, "");
+                tag(field, "data-unified-ai-field", ids);
+                return {
+                    targetId: ids.id,
+                    type: field.type || (field.isContentEditable ? "contenteditable" : "textarea"),
+                    label: fieldLabel,
+                    placeholder: redactPatientIdentifiers(field.getAttribute("placeholder") || "")
+                };
+            });
+
         const choices = Array.from(document.querySelectorAll(
             "input[type='checkbox'], input[type='radio'], [role='checkbox'], [role='radio']"
         ))
-            .map(function (choice, index) {
+            .map(function (choice) {
                 const labelElement = choice.labels && choice.labels.length
                     ? choice.labels[0]
                     : choice.closest("label") || Array.from(document.querySelectorAll("label[for]"))
                         .find(function (label) { return choice.id && label.htmlFor === choice.id; });
                 const target = isVisible(choice) ? choice : labelElement && isVisible(labelElement) ? labelElement : null;
                 if (!target || !isSafeField(choice)) return null;
-                const targetId = stableId("unified-choice-", choice, normalizeText(labelElement && labelElement.textContent || choice.getAttribute("aria-label") || choice.value || "") + "|" + (choice.name || "") + "|" + (choice.value || ""), usedIds);
-                if (target.getAttribute("data-unified-ai-choice") !== targetId) {
-                    target.setAttribute("data-unified-ai-choice", targetId);
-                }
-                const label = normalizeText(labelElement && labelElement.textContent
-                    || choice.getAttribute("aria-label") || choice.value || choice.getAttribute("data-label"));
+                const label = redactPatientIdentifiers(normalizeText(labelElement && labelElement.textContent
+                    || choice.getAttribute("aria-label") || choice.value || choice.getAttribute("data-label")) || "Choice");
+                if (isBlockedElement(choice, label, "")) return null;
+                const ids = makeId("unified-choice-", choice, label, usedIds, (choice.name || "") + "|" + (choice.value || ""));
+                tag(target, "data-unified-ai-choice", ids);
                 return {
-                    targetId: targetId,
-                    label: redactPatientIdentifiers(label || "Choice"),
+                    targetId: ids.id,
+                    label: label,
                     type: choice.type || choice.getAttribute("role"),
                     name: redactPatientIdentifiers(choice.name || choice.getAttribute("name") || ""),
                     value: redactPatientIdentifiers(choice.value || choice.getAttribute("data-value") || ""),
@@ -269,20 +376,21 @@
             })
             .filter(Boolean)
             .slice(0, 100);
+
         const itemSelector = ".service-card, .food-card, .menu-card-v2, .rec-card, .meal-select-pill, .meal-tab-box, .selection-card, .timing-card, .feedback-question, .order-card, .card, [data-category-id], [data-food-id], [data-order-type], [data-order-mode]";
         const items = Array.from(document.querySelectorAll(itemSelector))
             .filter(isVisible)
             .filter(function (item) { return !item.closest("#headerPatientInfo, .patient-info, .patient-details, [data-patient-info]"); })
-            .slice(0, 100)
+            .slice(0, 60)
             .map(function (item) {
                 const nameElement = item.querySelector(".food-title, .rec-title, .service-title, .tab-name, .meal-label-name, .question-text, h3, h4");
                 const isMenuItem = item.classList.contains("menu-card-v2") || item.classList.contains("rec-card");
                 const row = {
                     label: redactPatientIdentifiers(isMenuItem && nameElement
                         ? nameElement.textContent
-                        : item.innerText || item.textContent)
+                        : item.innerText || item.textContent).slice(0, 120)
                 };
-                if (nameElement) row.name = redactPatientIdentifiers(nameElement.textContent);
+                if (nameElement) row.name = redactPatientIdentifiers(nameElement.textContent).slice(0, 80);
                 row.disabled = !!item.disabled || item.classList.contains("disabled-card")
                     || item.getAttribute("aria-disabled") === "true";
                 const categoryId = item.getAttribute("data-category-id");
@@ -320,41 +428,50 @@
                     const cartItem = window.currentCart && window.currentCart[String(foodId) + "_" + String(meal || "")];
                     row.quantity = cartItem ? Number(cartItem.qty) || 0 : 0;
                 }
+                if (isBlockedElement(item, row.label, row.route)) return null;
                 return row;
             })
-            .filter(function (item) { return item.label; });
+            .filter(function (item) { return item && item.label; });
+
         const actionElements = Array.from(document.querySelectorAll(
             "button, a[href], [role='button'], [role='tab'], summary, input[type='button'], input[type='submit'], input[type='reset'], [onclick], [data-action], [data-route], .service-card, .order-card, .selection-card, .timing-card, .food-card, .menu-card-v2, .rec-card, .meal-select-pill, .meal-tab-box"
         ))
             .filter(function (element) {
-                // The notification bell opens a user-owned drawer and must only be clicked by the user.
                 return !element.closest("#unifiedAiFloatingBar")
                     && element.id !== "mobileNotificationTrigger";
             })
             .filter(isVisible)
             .slice(0, 150);
+
         const actions = actionElements
-            .map(function (element, index) {
+            .map(function (element) {
                 const label = interactiveLabel(element);
-                const route = safeRoute(element);
-                const action = element.getAttribute("data-action");
                 if (!label) return null;
-                const targetId = stableId("unified-action-", element, label, usedIds);
-                if (element.getAttribute("data-unified-ai-target") !== targetId) {
-                    element.setAttribute("data-unified-ai-target", targetId);
-                }
-                return {
-                    label: label,
+                const route = safeRoute(element);
+                if (isBlockedElement(element, label, route)) return null;
+                const dataAction = element.getAttribute("data-action");
+                const ids = makeId("unified-action-", element, label, usedIds, "");
+                tag(element, "data-unified-ai-target", ids);
+                const entry = {
+                    label: label.slice(0, 120),
                     disabled: isDisabled(element),
-                    targetId: targetId,
+                    targetId: ids.id,
                     id: element.id || undefined,
-                    action: action || undefined,
+                    action: dataAction || undefined,
                     route: route || undefined
                 };
+                const group = cardName(element);
+                if (group) entry.group = group;
+                const scope = foodScope(element);
+                if (scope && scope.foodId) {
+                    entry.foodId = scope.foodId;
+                    if (scope.meal) entry.meal = scope.meal;
+                }
+                return entry;
             })
             .filter(Boolean);
 
-        return {
+        const context = {
             route: window.location.pathname,
             title: redactPatientIdentifiers(document.title),
             headings: Array.from(document.querySelectorAll("h1, h2, h3"))
@@ -368,6 +485,10 @@
             items: items,
             actions: actions
         };
+
+        const cart = cartContext();
+        if (cart) context.cart = cart;
+        return context;
     }
 
     let lastContextJson = "";
@@ -376,7 +497,7 @@
         contextTimer = null;
         const context = pageContext();
         let encoded = JSON.stringify(context);
-        while (encoded.length > 18000 && context.items.length > 10) {
+        while (encoded.length > 14000 && context.items.length > 10) {
             context.items.pop();
             encoded = JSON.stringify(context);
         }
@@ -387,7 +508,7 @@
 
     function schedulePageContext() {
         if (contextTimer) clearTimeout(contextTimer);
-        contextTimer = setTimeout(sendPageContext, 250);
+        contextTimer = setTimeout(sendPageContext, 120);
     }
 
     function selectVisibleOption(action) {
@@ -438,28 +559,45 @@
     }
 
     function findUiTarget(attribute, targetId) {
+        if (!targetId) return null;
         return Array.from(document.querySelectorAll("[" + attribute + "]")).find(function (element) {
             return element.getAttribute(attribute) === targetId && isVisible(element);
-        });
+        }) || null;
     }
 
-    // Voice actions can arrive while a page is still loading or re-rendering. Instead of failing
-    // at once, look again for up to 3 s, and fall back to the visible label when the id is gone.
+    function findByKey(attribute, keyHash) {
+        if (!keyHash) return null;
+        const matches = Array.from(document.querySelectorAll("[" + attribute + "][data-uai-key='" + keyHash + "']")).filter(isVisible);
+        return matches.length === 1 ? matches[0] : null;
+    }
+
     function findByLabel(attribute, label) {
         if (attribute !== "data-unified-ai-target") return null;
         const wanted = normalizeText(label).toLowerCase();
         if (!wanted) return null;
-        const matches = Array.from(document.querySelectorAll("[" + attribute + "]")).filter(function (element) {
-            return isVisible(element) && normalizeText(interactiveLabel(element)).toLowerCase() === wanted;
+        const candidates = Array.from(document.querySelectorAll("[" + attribute + "]")).filter(isVisible);
+        const exact = candidates.filter(function (element) {
+            return normalizeText(interactiveLabel(element)).toLowerCase() === wanted;
         });
-        return matches.length === 1 ? matches[0] : null;   // never guess between several
+        if (exact.length === 1) return exact[0];
+        if (exact.length > 1) return null;
+        const loose = neutralText(wanted);
+        if (!loose) return null;
+        const approximate = candidates.filter(function (element) {
+            return neutralText(interactiveLabel(element)) === loose;
+        });
+        return approximate.length === 1 ? approximate[0] : null;
     }
 
     function resolveTarget(attribute, action, callback) {
-        const deadline = Date.now() + 3000;
+        if (!action.targetId && !action.label) { callback(null); return; }
+        const deadline = Date.now() + 1500;
+        const previousKey = registry[action.targetId];
         (function attempt() {
-            pageContext();   // re-tag controls so ids reflect the page as it is right now
-            const target = findUiTarget(attribute, action.targetId) || findByLabel(attribute, action.label);
+            pageContext();
+            const target = findUiTarget(attribute, action.targetId)
+                || findByKey(attribute, previousKey)
+                || findByLabel(attribute, action.label);
             if (target) { callback(target); return; }
             if (Date.now() < deadline) { window.setTimeout(attempt, 150); return; }
             callback(null);
@@ -468,16 +606,25 @@
 
     function executeVisibleUIAction(action) {
         if (action.action === "ui.click") {
+            if (!action.targetId && !action.label) {
+                respond(action, false, null, "ui.click needs a targetId or a label.");
+                return;
+            }
             resolveTarget("data-unified-ai-target", action, function (target) {
                 if (!target || isDisabled(target)) {
                     respond(action, false, null, "The selected visible action is no longer available.");
                     return;
                 }
+                const targetLabel = interactiveLabel(target);
+                if (isBlockedElement(target, targetLabel, safeRoute(target))) {
+                    respond(action, false, null, "This action is blocked for patient session safety.");
+                    return;
+                }
                 target.scrollIntoView({ behavior: "smooth", block: "center" });
                 window.setTimeout(function () {
                     target.click();
-                    sendPageContext();
-                    respond(action, true, { clicked: interactiveLabel(target) });
+                    schedulePageContext();
+                    respond(action, true, { clicked: targetLabel });
                 }, 25);
             });
             return;
@@ -543,10 +690,86 @@
         });
     }
 
+    function emitConfirmation(detail) {
+        try {
+            const parentWindow = window.parent;
+            parentWindow.dispatchEvent(new parentWindow.CustomEvent("unified-ai:order-confirmed", { detail: detail }));
+        } catch (error) { }
+    }
+
+    function isOrderUrl(url) {
+        try {
+            const path = new URL(String(url || ""), window.location.href).pathname;
+            return ORDER_URL_REGEX.test(path) && !ORDER_URL_EXCLUDE_REGEX.test(path);
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function handleOrderResponse(url, status, data) {
+        if (data && typeof data === "object") {
+            const failed = [data.success, data.Success, data.isSuccess, data.IsSuccess, data.ok].some(function (flag) { return flag === false; })
+                || !!data.error || !!data.Error;
+            if (failed) return;
+        }
+        let path = "";
+        try { path = new URL(String(url || ""), window.location.href).pathname; } catch (error) { }
+        const orderId = data && typeof data === "object"
+            ? data.orderId || data.OrderId || data.requestId || data.RequestId || data.id || data.Id || ""
+            : "";
+        emitConfirmation({ source: "network", path: path, status: String(status || ""), order_id: String(orderId || "") });
+    }
+
+    if (typeof window.fetch === "function") {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            const promise = originalFetch(input, init);
+            try {
+                const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+                const url = typeof input === "string" ? input : (input && input.url) || "";
+                if (method === "POST" && isOrderUrl(url)) {
+                    promise.then(function (response) {
+                        if (!response.ok) return;
+                        response.clone().json().then(
+                            function (data) { handleOrderResponse(url, response.status, data); },
+                            function () { handleOrderResponse(url, response.status, null); }
+                        );
+                    }, function () { });
+                }
+            } catch (error) { }
+            return promise;
+        };
+    }
+
+    if (window.XMLHttpRequest) {
+        const originalOpen = XMLHttpRequest.prototype.open;
+        const originalSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function (method, url) {
+            this.__uaiMethod = String(method || "GET").toUpperCase();
+            this.__uaiUrl = url;
+            return originalOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function () {
+            const xhr = this;
+            if (xhr.__uaiMethod === "POST" && isOrderUrl(xhr.__uaiUrl)) {
+                xhr.addEventListener("load", function () {
+                    if (xhr.status < 200 || xhr.status >= 300) return;
+                    let data = null;
+                    try { data = JSON.parse(xhr.responseText); } catch (error) { }
+                    handleOrderResponse(xhr.__uaiUrl, xhr.status, data);
+                });
+            }
+            return originalSend.apply(this, arguments);
+        };
+    }
+
     window.UnifiedAIChild = {
         respond: respond,
         resolveRequestCategory: resolveRequestCategory,
         sendPageContext: schedulePageContext,
+        confirm: function (detail) {
+            emitConfirmation(Object.assign({ source: "page" }, detail || {}));
+        },
         showChat: function () {
             window.parent.postMessage({ type: "unified_ai_show_chat" }, window.location.origin);
         },
@@ -574,6 +797,7 @@
         const element = event.target instanceof Element ? event.target : null;
         const link = element && element.closest("a[href]");
         if (!link || link.hasAttribute("download") || link.target === "_blank") return;
+        if (link.target === "_top" || link.target === "_parent") link.target = "_self";
         const target = keepUnifiedRoute(link.href);
         if (!target) return;
         if (isUnifiedHomePath(target.pathname)) {
@@ -587,6 +811,7 @@
     document.addEventListener("submit", function (event) {
         const form = event.target;
         if (!(form instanceof HTMLFormElement)) return;
+        if (form.target === "_top" || form.target === "_parent") form.target = "_self";
         const target = keepUnifiedRoute(form.action || window.location.href);
         if (!target) return;
         if (form.method.toLowerCase() === "get") {

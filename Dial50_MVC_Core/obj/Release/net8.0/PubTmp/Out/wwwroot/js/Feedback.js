@@ -39,7 +39,7 @@ function initFeedback() {
     _bedInfoEncrypt = getLiveBedInfo();
     _patientName = getLivePatientName();
     _roomBed = getLiveRoomBed();
-    loadDepartments();
+    return loadDepartments();
 }
 
 function loadDepartments() {
@@ -51,7 +51,7 @@ function loadDepartments() {
         requestData.bedNo = roomBed;
     }
 
-    $.ajax({
+    return $.ajax({
         url: '/api/Feedback/GetActiveDepartments',
         type: 'GET',
         data: requestData,
@@ -395,14 +395,14 @@ function submitFeedback() {
         var id = requiredIds[i];
         if (!answers[id]) {
             showToast('Please answer all questions before submitting.');
-            return;
+            return false;
         }
     }
 
     for (var deptId in departmentRatings) {
         if (!departmentRatings[deptId].rating) {
             showToast('Please rate all departments before submitting.');
-            return;
+            return false;
         }
     }
 
@@ -415,7 +415,7 @@ function submitFeedback() {
                 var textarea = document.getElementById('remarksText' + qNum);
                 if (!textarea || textarea.value.trim() === '') {
                     showToast('Please provide remarks for unsatisfied answers.');
-                    return;
+                    return false;
                 }
             }
         }
@@ -429,7 +429,7 @@ function submitFeedback() {
                 var textarea = document.getElementById('remarksText' + qNum);
                 if (!textarea || textarea.value.trim() === '') {
                     showToast('Please provide remarks for unsatisfied departments.');
-                    return;
+                    return false;
                 }
             }
         }
@@ -536,7 +536,7 @@ function submitFeedback() {
 
     if (!liveBedInfo || !liveRoomBed) {
         showToast('Session data missing. Please rescan your QR code.');
-        return;
+        return false;
     }
 
     var feedbackData = {
@@ -560,14 +560,18 @@ function submitFeedback() {
             if (response.success) {
                 document.getElementById('thankyouModal').classList.add('show');
                 document.body.style.overflow = 'hidden';
+                finishUnifiedFeedback(true, { referenceNo: referenceNo });
             } else {
                 showToast('Error submitting feedback. Please try again.');
+                finishUnifiedFeedback(false, null, 'Feedback submission failed.');
             }
         },
         error: function () {
             showToast('Error submitting feedback. Please try again.');
+            finishUnifiedFeedback(false, null, 'Feedback submission failed.');
         }
     });
+    return true;
 }
 
 function getQuestionNumberByDepartment(departmentId) {
@@ -587,6 +591,102 @@ function closeThankYou() {
 function goBack() {
     BedContext.go('Home');
 }
+
+function finishUnifiedFeedback(success, result, error) {
+    var action = window.__unifiedAIFeedbackSubmitAction;
+    if (!action || !window.UnifiedAIChild) return;
+    window.__unifiedAIFeedbackSubmitAction = null;
+    window.UnifiedAIChild.respond(action, success, result, error);
+}
+
+window.addEventListener('unified-ai:action', function (event) {
+    var action = event.detail;
+    if (!action || typeof action.action !== 'string' || action.action.indexOf('feedback.') !== 0) return;
+
+    function respond(success, result, error) {
+        if (window.UnifiedAIChild) window.UnifiedAIChild.respond(action, success, result, error);
+    }
+
+    function getQuestions() {
+        return Array.from(document.querySelectorAll('.feedback-question')).map(function (element) {
+            var questionId = element.dataset.questionId || null;
+            var departmentId = element.dataset.departmentId || null;
+            return {
+                questionId: questionId,
+                departmentId: departmentId,
+                question: element.querySelector('.question-text')?.textContent.trim() || '',
+                type: element.dataset.type || '',
+                required: departmentId !== null || ['1', '2', '3', '6'].includes(String(questionId)),
+                choices: Array.from(element.querySelectorAll('.rating-option')).map(function (option) {
+                    return option.dataset.value;
+                })
+            };
+        });
+    }
+
+    if (action.action === 'feedback.start') {
+        Promise.resolve(window.__feedbackInitPromise).then(function () {
+            respond(true, { questions: getQuestions() });
+        }).catch(function () {
+            respond(false, null, 'Could not load feedback questions.');
+        });
+        return;
+    }
+
+    if (action.action === 'feedback.answer') {
+        var questionId = action.questionId == null ? '' : String(action.questionId);
+        var departmentId = action.departmentId == null ? '' : String(action.departmentId);
+        var questionText = String(action.question || '').trim().toLowerCase();
+        var questionElement = Array.from(document.querySelectorAll('.feedback-question')).find(function (element) {
+            if (departmentId && element.dataset.departmentId === departmentId) return true;
+            if (questionId && element.dataset.questionId === questionId) return true;
+            return !departmentId && !questionId
+                && questionText
+                && element.querySelector('.question-text')?.textContent.trim().toLowerCase() === questionText;
+        });
+
+        if (!questionElement) {
+            respond(false, null, 'Feedback question was not found.');
+            return;
+        }
+
+        questionElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var value = String(action.value == null ? '' : action.value).trim().toLowerCase();
+        var answerOption = Array.from(questionElement.querySelectorAll('.rating-option')).find(function (option) {
+            return option.dataset.value === value;
+        });
+        if (answerOption) {
+            answerOption.click();
+        } else if (questionElement.dataset.type === 'text' || questionElement.dataset.type === 'comments') {
+            var textArea = questionElement.querySelector('textarea');
+            if (!textArea) {
+                respond(false, null, 'Feedback text field was not found.');
+                return;
+            }
+            textArea.value = String(action.value || '').slice(0, 2000);
+            textArea.dispatchEvent(new Event('input', { bubbles: true }));
+            textArea.focus({ preventScroll: true });
+        } else {
+            respond(false, null, 'Unsupported feedback answer.');
+            return;
+        }
+
+        var remarksInput = questionElement.querySelector('.remarks-textarea');
+        if (remarksInput && action.remarks != null) {
+            remarksInput.value = String(action.remarks).slice(0, 2000);
+            remarksInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        respond(true, { questionId: questionId || null, departmentId: departmentId || null });
+        return;
+    }
+
+    if (action.action === 'feedback.submit') {
+        window.__unifiedAIFeedbackSubmitAction = action;
+        if (!submitFeedback()) {
+            finishUnifiedFeedback(false, null, 'Feedback form is incomplete or invalid.');
+        }
+    }
+});
 
 
 $(document).ready(function () {

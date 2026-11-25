@@ -1,39 +1,31 @@
 ﻿(function (w, d) {
     'use strict';
 
+    var PROMPT_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
+    w.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+    });
+
     var cfg = w.PUSH_CONFIG || {
         swUrl: '/sw.js',
         scope: '/',
         api: '/api/Push'
     };
 
-    var SYNC_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-
     var state = {
         room: '',
         reg: null,
-        installEvt: null,
-        started: false
+        started: false,
+        promptKey: '',
+        promptKeyPromise: null,
+        statusCheck: null
     };
 
     function supported() {
         return 'serviceWorker' in navigator &&
             'PushManager' in w &&
             'Notification' in w;
-    }
-
-    function isIos() {
-        return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    }
-
-    function isStandalone() {
-        return (w.matchMedia && w.matchMedia('(display-mode: standalone)').matches) ||
-            w.navigator.standalone === true;
-    }
-
-    function needsIosInstall() {
-        return isIos() && !isStandalone();
     }
 
     function b64ToU8(b64) {
@@ -53,6 +45,50 @@
             try { v = new URLSearchParams(w.location.search).get('BedInfo') || ''; } catch (e) { }
         }
         return v;
+    }
+
+    function getPromptStorageKey() {
+        if (state.promptKey) return Promise.resolve(state.promptKey);
+        if (state.promptKeyPromise) return state.promptKeyPromise;
+
+        var identity = state.room.trim().toUpperCase() + '\n' + getBedInfo();
+        if (!w.crypto || !w.crypto.subtle || !w.TextEncoder) {
+            state.promptKey = 'pushPrompt:v2:room:' + encodeURIComponent(state.room.trim().toUpperCase());
+            return Promise.resolve(state.promptKey);
+        }
+
+        state.promptKeyPromise = w.crypto.subtle.digest('SHA-256', new w.TextEncoder().encode(identity))
+            .then(function (digest) {
+                var key = Array.from(new Uint8Array(digest)).map(function (value) {
+                    return value.toString(16).padStart(2, '0');
+                }).join('');
+                state.promptKey = 'pushPrompt:v2:' + key;
+                return state.promptKey;
+            })
+            .catch(function (error) {
+                console.warn('Could not create a browser-local notification prompt key:', error);
+                state.promptKey = 'pushPrompt:v2:room:' + encodeURIComponent(state.room.trim().toUpperCase());
+                return state.promptKey;
+            });
+        return state.promptKeyPromise;
+    }
+
+    function readLocalPromptState(key) {
+        try {
+            return JSON.parse(localStorage.getItem(key) || '{}');
+        } catch (error) {
+            console.warn('Could not read the local notification prompt state:', error);
+            return {};
+        }
+    }
+
+    function writeLocalPromptState(key, values) {
+        var current = readLocalPromptState(key);
+        try {
+            localStorage.setItem(key, JSON.stringify(Object.assign({}, current, values)));
+        } catch (error) {
+            console.warn('Could not save the local notification prompt state:', error);
+        }
     }
 
     function api(path, method, body) {
@@ -114,11 +150,27 @@
     }
 
     function completePrompt() {
-        return api('/CompletePrompt', 'POST', getPromptData()).catch(function () { });
+        return getPromptStorageKey().then(function (key) {
+            writeLocalPromptState(key, { enabled: true, deferredUntil: 0, shownUntil: 0 });
+            return api('/CompletePrompt', 'POST', getPromptData()).then(function (result) {
+                if (!result || !result.success) throw new Error('The server did not confirm notification setup.');
+                return result;
+            });
+        });
     }
 
     function deferPrompt() {
-        return api('/DeferPrompt', 'POST', getPromptData()).catch(function () { });
+        return getPromptStorageKey().then(function (key) {
+            var deferredUntil = Date.now() + PROMPT_COOLDOWN_MS;
+            writeLocalPromptState(key, { deferredUntil: deferredUntil, shownUntil: deferredUntil });
+            return api('/DeferPrompt', 'POST', getPromptData()).then(function (result) {
+                if (!result || !result.success) throw new Error('The server did not confirm the notification delay.');
+                return result;
+            }).catch(function (error) {
+                console.warn('Notification delay is saved in this browser but could not be synced:', error);
+                return { success: false, localOnly: true };
+            });
+        });
     }
 
     function removeModal() {
@@ -126,17 +178,17 @@
         if (modal && modal.parentNode) modal.parentNode.removeChild(modal);
     }
 
-    function showPromptModal(iosMode) {
-        removeModal();
-
-        var bodyText = iosMode
-            ? 'To get real-time updates, tap your browser\'s <strong>Share</strong> icon and select <strong>Add to Home Screen</strong>, then open the app from the new icon.'
-            : 'Get real-time updates on your orders and requests directly on your device.';
-
-        var allowDisplay = iosMode ? 'none' : 'block';
+    function showPromptModal() {
+        if (!supported() || Notification.permission !== 'default' || d.getElementById('pushBlockedModal')) return;
+        if (state.promptKey) {
+            var now = Date.now();
+            var localState = readLocalPromptState(state.promptKey);
+            if (localState.enabled || localState.deferredUntil > now || localState.shownUntil > now) return;
+            writeLocalPromptState(state.promptKey, { shownUntil: now + PROMPT_COOLDOWN_MS });
+        }
 
         var modalHtml = `
-            <div id="pushBlockedModal" style="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+            <div id="pushBlockedModal" role="dialog" aria-modal="true" aria-labelledby="pushPromptTitle" style="position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
                 <div style="background:white;width:90%;max-width:400px;border-radius:24px;padding:32px 24px;text-align:center;box-shadow:0 25px 50px -12px rgba(0,0,0,0.25);animation:slideUp 0.3s ease-out;">
                     <div style="width:64px;height:64px;background:#eef2ff;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
                         <svg width="32" height="32" fill="none" stroke="#4f46e5" stroke-width="2.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
@@ -144,12 +196,12 @@
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                         </svg>
                     </div>
-                    <h2 style="margin:0 0 12px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;">Enable Notifications</h2>
-                    <p style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.5;">${bodyText}</p>
-                    <button id="modalAllowBtn" style="display:${allowDisplay};width:100%;background:#4f46e5;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:8px;">
-                        Allow
+                    <h2 id="pushPromptTitle" style="margin:0 0 12px;font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;">Enable Notifications</h2>
+                    <p id="pushPromptMessage" style="margin:0 0 24px;font-size:15px;color:#64748b;line-height:1.5;">Allow notifications to receive updates about your orders and requests.</p>
+                    <button id="modalAllowBtn" type="button" style="width:100%;background:#4f46e5;color:white;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;cursor:pointer;margin-bottom:8px;">
+                        Allow Notifications
                     </button>
-                    <button id="modalCloseBtn" style="width:100%;background:transparent;color:#64748b;border:none;padding:14px;font-size:14px;font-weight:600;cursor:pointer;">
+                    <button id="modalCloseBtn" type="button" style="width:100%;background:transparent;color:#64748b;border:none;padding:14px;font-size:14px;font-weight:600;cursor:pointer;">
                         Maybe Later
                     </button>
                 </div>
@@ -163,14 +215,27 @@
             btn.disabled = true;
             btn.textContent = 'Please wait...';
 
-            enable().then(function () {
-                completePrompt().then(function () {
-                    removeModal();
-                });
-            }).catch(function () {
-                completePrompt().then(function () {
-                    removeModal();
-                });
+            enable().then(function (result) {
+                if (result === 'granted') {
+                    return completePrompt().catch(function (error) {
+                        console.warn('Notifications are enabled in this browser, but setup could not be synced:', error);
+                    }).then(function () {
+                        removeModal();
+                    });
+                }
+                if (result === 'default' || result === 'denied') {
+                    return deferPrompt().then(function () {
+                        removeModal();
+                    });
+                }
+                btn.disabled = false;
+                btn.textContent = 'Allow Notifications';
+            }).catch(function (error) {
+                console.error('Could not enable notifications:', error);
+                var message = d.getElementById('pushPromptMessage');
+                if (message) message.textContent = 'Notifications could not be enabled. Please try again.';
+                btn.disabled = false;
+                btn.textContent = 'Allow Notifications';
             });
         });
 
@@ -181,56 +246,68 @@
     }
 
     function updateUi() {
-        if (needsIosInstall()) {
-            if (!d.getElementById('pushBlockedModal')) showPromptModal(true);
-            return;
-        }
-
-        if (!supported()) return;
-
-        if (Notification.permission === 'granted') {
+        if (!state.room || !supported()) {
             removeModal();
             return;
         }
 
-        if (d.getElementById('pushBlockedModal')) return;
+        if (Notification.permission === 'granted' || Notification.permission === 'denied') {
+            removeModal();
+            return;
+        }
 
-        fetch(cfg.api + '/GetPromptStatus?roomNo=' + encodeURIComponent(state.room) + '&bedInfo=' + encodeURIComponent(getBedInfo()))
-            .then(function (r) { return r.ok ? r.json() : null; })
-            .then(function (status) {
-                if (status && status.success) {
-                    if (status.status === 'ENABLED') return;
-                    if (status.status === 'DEFERRED' && status.shouldShow === false) return;
+        if (d.getElementById('pushBlockedModal') || state.statusCheck) return;
+
+        state.statusCheck = getPromptStorageKey().then(function (key) {
+            var localState = readLocalPromptState(key);
+            var now = Date.now();
+            if (localState.enabled || localState.deferredUntil > now || localState.shownUntil > now) {
+                removeModal();
+                return null;
+            }
+
+            var url = cfg.api + '/GetPromptStatus?roomNo=' + encodeURIComponent(state.room)
+                + '&bedInfo=' + encodeURIComponent(getBedInfo());
+            return fetch(url, { credentials: 'same-origin' }).then(function (response) {
+                if (!response.ok) throw new Error('HTTP ' + response.status + ' while checking notification prompt status.');
+                return response.json();
+            }).then(function (status) {
+                if (!status || !status.success) throw new Error('Notification prompt status was not returned.');
+                if (status.status === 'DEFERRED' && status.shouldShow === false) {
+                    var nextPromptAt = Date.parse(status.nextPromptAt);
+                    if (!Number.isFinite(nextPromptAt) || nextPromptAt <= now) {
+                        nextPromptAt = now + PROMPT_COOLDOWN_MS;
+                    }
+                    writeLocalPromptState(key, { deferredUntil: nextPromptAt, shownUntil: nextPromptAt });
+                    removeModal();
+                    return null;
                 }
-                showPromptModal(false);
-            })
-            .catch(function () {
-                showPromptModal(false);
+                showPromptModal();
+                return status;
             });
+        }).catch(function (error) {
+            console.warn('Could not check notification prompt status; not showing a repeat prompt:', error);
+        }).finally(function () {
+            state.statusCheck = null;
+        });
     }
 
     function enable() {
-        if (needsIosInstall()) return Promise.resolve('ios-install');
         if (!supported()) return Promise.resolve('unsupported');
+        if (Notification.permission === 'denied') return Promise.resolve('denied');
 
-        return Notification.requestPermission().then(function (p) {
-            if (p !== 'granted') return p;
-
-            return subscribe().then(function () {
-                return completePrompt();
-            }).then(function () {
-                updateUi();
-                return 'granted';
-            });
+        var permission = Notification.permission === 'granted'
+            ? Promise.resolve('granted')
+            : Notification.requestPermission();
+        return permission.then(function (result) {
+            if (result !== 'granted') return result;
+            return subscribe().then(function () { return 'granted'; });
         });
     }
 
     function init(roomNo) {
         state.room = roomNo || '';
-        if (state.started) { updateUi(); return; }
-
-        if (needsIosInstall()) {
-            state.started = true;
+        if (state.started) {
             updateUi();
             return;
         }
@@ -238,14 +315,26 @@
         if (!supported() || !state.room) return;
         state.started = true;
 
-        getReg().catch(function () { });
+        getReg().catch(function (error) {
+            console.warn('Could not initialize the notification service worker:', error);
+        });
 
         if (Notification.permission === 'granted') {
-            subscribe().then(completePrompt).catch(function () { });
+            subscribe().then(completePrompt).catch(function (error) {
+                console.warn('Could not refresh this browser notification subscription:', error);
+            });
         }
 
         updateUi();
     }
+
+    w.addEventListener('storage', function (event) {
+        if (!state.promptKey || event.key !== state.promptKey) return;
+        var localState = readLocalPromptState(state.promptKey);
+        if (localState.enabled || localState.deferredUntil > Date.now() || localState.shownUntil > Date.now()) {
+            removeModal();
+        }
+    });
 
     w.PushClient = {
         init: init,

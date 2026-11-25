@@ -29,15 +29,23 @@
         feedback: "/OverAllFeedback/Index"
     };
 
+    const BLOCKED_LABEL_REGEX = /\b(log\s*out|logout|log\s*off|sign\s*out|signout|sign\s*off|end\s*(the\s*)?(call|session)|hang\s*up|disconnect\s*call|delete\s*account|exit\s*app)\b/i;
+    const BLOCKED_ROUTE_REGEX = /^\/(?:account\/)?(?:log-?out|log-?off|sign-?out|log-?in|prelanding)(?:\/|\?|$)/i;
+    const BLOCKED_HINT_REGEX = /log-?out|sign-?out|log-?off|end-?call|hang-?up/i;
+    const CARD_SELECTOR = ".card, .service-card, .food-card, .bottom-card, .patient-status-card, .patfeedback-card, .order-card, .selection-card, .timing-card";
+    const SCOPE_ATTRIBUTES = ["data-food-id", "data-category-id", "data-order-id", "data-notification-id", "data-question-id", "data-meal-type"];
+    const CONTEXT_MIN_GAP_MS = 500;
+    const NAVIGATION_TIMEOUT_MS = 8000;
+
     let frameReady = false;
     let pendingActions = [];
+    let pendingNavigation = null;
     let activeTarget = null;
     let latestFrameContext = null;
     let lastSentContext = "";
     let lastContextSentAt = 0;
     let contextRetryTimer = null;
     let lastContextRoute = "";
-    const CONTEXT_MIN_GAP_MS = 2500;   // never send app_context more often than this
     let simulatedSession = false;
     let voiceNavSession = false;
     let screenWakeLock = null;
@@ -45,8 +53,49 @@
     let suppressReturnClickUntil = 0;
     let dragState = null;
     let callPresentation = "full";
+    let suppressEndedUntil = 0;
+    let registry = {};
+    let registryCount = 0;
     const originalCallLayerDisplay = callLayer ? callLayer.style.getPropertyValue("display") : "";
     const originalCallLayerDisplayPriority = callLayer ? callLayer.style.getPropertyPriority("display") : "";
+
+    function normalizeText(value) {
+        return String(value || "").replace(/\s+/g, " ").trim();
+    }
+
+    function neutralText(value) {
+        return normalizeText(value).toLowerCase().replace(/[0-9\u20B9$\u20AC\u00A3.,:%]+/g, " ").replace(/\s+/g, " ").trim();
+    }
+
+    function fnv1aHash(value) {
+        let hash = 2166136261;
+        const input = String(value || "");
+        for (let i = 0; i < input.length; i++) {
+            hash ^= input.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(36);
+    }
+
+    function stripPath(path) {
+        return String(path || "").split("?")[0].replace(/^\/+|\/+$/g, "").toLowerCase();
+    }
+
+    function isBlockedElement(element, label, route) {
+        if (BLOCKED_LABEL_REGEX.test(label || "") || BLOCKED_ROUTE_REGEX.test(String(route || "").trim())) return true;
+        if (!element || !element.getAttribute) return false;
+        const hints = [
+            element.id,
+            element.getAttribute("data-action"),
+            element.getAttribute("href"),
+            element.getAttribute("data-route"),
+            element.getAttribute("onclick"),
+            element.getAttribute("aria-label"),
+            element.getAttribute("title"),
+            typeof element.className === "string" ? element.className : ""
+        ].join(" ");
+        return BLOCKED_HINT_REGEX.test(hints);
+    }
 
     function isCallActive() {
         const state = document.body.getAttribute("data-state");
@@ -56,6 +105,125 @@
     function isRealCallActive() {
         const state = document.body.getAttribute("data-state");
         return state === "connecting" || state === "connected";
+    }
+
+    function isVoiceConnected() {
+        return !simulatedSession && document.body.getAttribute("data-state") === "connected"
+            && typeof window.sendVoiceAgentMessage === "function";
+    }
+
+    function isHiddenOnlyByCallOverlay(element) {
+        if (!isRealCallActive() || callPresentation === "minimized") return false;
+        if (element.closest("[hidden], [aria-hidden='true'], #interactiveCard, .idle-layer, #callLayer, #endedLayer, .modal-overlay, .rs-modal-overlay, .video-overlay, #autoStartLoader")) return false;
+        if (element.style && element.style.display === "none") return false;
+        return !!element.closest("#pageNav, .nav, .nav-bar, .bottom-nav, .top-nav, .app-nav, .patfeedback-card, .patient-status-card, .bottom-card");
+    }
+
+    function isBlankFrame() {
+        try {
+            return !frame.contentWindow || frame.contentWindow.location.href === "about:blank";
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function currentFramePath() {
+        try { return frame.contentWindow ? frame.contentWindow.location.pathname : ""; }
+        catch (error) { return ""; }
+    }
+
+    function discoveredRoutes() {
+        const found = {};
+        document.querySelectorAll("#pageNav [data-page], .navBtn[data-page]").forEach(function (element) {
+            const page = String(element.getAttribute("data-page") || "").trim();
+            if (!page) return;
+            const route = "/" + page.replace(/^\/+/, "");
+            if (BLOCKED_ROUTE_REGEX.test(route)) return;
+            const key = stripPath(page).split("/")[0].replace(/[^a-z0-9]/g, "");
+            if (key && !found[key]) found[key] = route;
+        });
+        return found;
+    }
+
+    function resolveRoute(target) {
+        if (!target) return null;
+        if (Object.prototype.hasOwnProperty.call(routes, target)) return routes[target];
+        const wanted = String(target).toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!wanted) return null;
+        const known = Object.keys(routes).find(function (key) { return key.replace(/[^a-z0-9]/g, "") === wanted; });
+        if (known) return routes[known];
+        return discoveredRoutes()[wanted] || null;
+    }
+
+    function routeTargetForPath(path) {
+        const normalized = stripPath(path);
+        const withoutIndex = normalized.replace(/\/index$/, "");
+        const entries = Object.keys(routes).map(function (key) { return [key, stripPath(routes[key])]; });
+        const exact = entries.find(function (entry) {
+            return entry[1] === normalized || entry[1].replace(/\/index$/, "") === withoutIndex;
+        });
+        if (exact) return exact[0];
+        const controller = normalized.split("/")[0];
+        if (controller === "fooddining") {
+            if (normalized === "fooddining/otherservices") return "food_other_services";
+            if (normalized === "fooddining/fooddining" || normalized === "fooddining") return "food_explore";
+            return "food_order";
+        }
+        const sameController = entries.find(function (entry) { return entry[1].split("/")[0] === controller; });
+        return sameController ? sameController[0] : "page:" + normalized;
+    }
+
+    function normalizeAppOrigin(url) {
+        if (url.protocol !== window.location.protocol || url.hostname !== window.location.hostname) return false;
+        if (url.port !== window.location.port) url.port = window.location.port;
+        return url.origin === window.location.origin;
+    }
+
+    function withContext(url) {
+        const bedContext = window.BedContext && window.BedContext.get ? window.BedContext.get() : {};
+        const bedInfo = bedContext.bedInfo || pageParams.get("BedInfo");
+        const tenantId = bedContext.tenantId || pageParams.get("XTenantID") || sessionStorage.getItem("XTenantID");
+        const region = bedContext.region || pageParams.get("region") || sessionStorage.getItem("region");
+        if (bedInfo) url.searchParams.set("BedInfo", bedInfo);
+        if (tenantId) url.searchParams.set("XTenantID", tenantId);
+        if (region) url.searchParams.set("region", region);
+        url.searchParams.set("Unified", "1");
+        url.searchParams.set("UnifiedAI", "1");
+        return url;
+    }
+
+    function alreadyOnPath(url) {
+        if (!frameLayer.classList.contains("is-open") || !frameReady) return false;
+        const current = currentFramePath();
+        return !!current && current.toLowerCase() === url.pathname.toLowerCase();
+    }
+
+    function clearPendingNavigation(success, result, error) {
+        if (!pendingNavigation) return;
+        const nav = pendingNavigation;
+        pendingNavigation = null;
+        clearTimeout(nav.fallbackTimer);
+        clearTimeout(nav.timeoutTimer);
+        reportResult(nav.action, success, result, error);
+    }
+
+    function resolvePendingNavigation() {
+        if (!pendingNavigation || !latestFrameContext || !latestFrameContext.route) return;
+        const actual = currentFramePath();
+        if (actual && String(latestFrameContext.route).toLowerCase() !== actual.toLowerCase()) return;
+        clearPendingNavigation(true, { target: pendingNavigation.result.target, path: actual || pendingNavigation.result.path });
+    }
+
+    function resetModuleFrame() {
+        clearPendingNavigation(false, null, "The module closed before navigation finished.");
+        frameReady = false;
+        latestFrameContext = null;
+        activeTarget = null;
+        frame.style.visibility = "hidden";
+        const currentSrc = frame.getAttribute("src");
+        if (currentSrc && currentSrc !== "about:blank") {
+            frame.src = "about:blank";
+        }
     }
 
     function setCallPresentation(presentation) {
@@ -90,16 +258,104 @@
     }
 
     function notifyTestContextChanged() {
-        // always tell the AI bridge; the test panel still only listens in local test mode
         window.dispatchEvent(new CustomEvent("unified-ai:context-changed"));
         if (isLocalTestMode) {
             window.dispatchEvent(new CustomEvent("unified-ai:test-context-changed"));
         }
     }
 
+    function scopeKey(element) {
+        const scope = element.closest("[" + SCOPE_ATTRIBUTES.join("],[") + "]");
+        const attrs = scope ? SCOPE_ATTRIBUTES.map(function (name) { return scope.getAttribute(name) || ""; }).join(".") : "";
+        const card = element.closest(CARD_SELECTOR);
+        const heading = card && card !== element ? card.querySelector("h1, h2, h3, h4, .card-title, .service-title, .food-title") : null;
+        return attrs + "/" + (heading ? neutralText(heading.textContent).slice(0, 60) : "");
+    }
+
+    function makeId(prefix, element, label, used, extra, route) {
+        const strong = [
+            element.id || "",
+            element.getAttribute("data-action") || "",
+            route || "",
+            element.getAttribute("name") || ""
+        ].join("~");
+        const hasStrong = strong.replace(/~/g, "") !== "";
+        const key = [
+            element.tagName,
+            strong,
+            hasStrong ? "" : neutralText(label),
+            scopeKey(element),
+            extra || ""
+        ].join("|").toLowerCase();
+        const keyHash = fnv1aHash(key);
+        const base = prefix + keyHash;
+        used[base] = (used[base] || 0) + 1;
+        return { id: used[base] > 1 ? base + "-" + used[base] : base, key: keyHash };
+    }
+
+    function tag(target, attribute, ids) {
+        if (target.getAttribute(attribute) !== ids.id) target.setAttribute(attribute, ids.id);
+        if (target.getAttribute("data-uai-key") !== ids.key) target.setAttribute("data-uai-key", ids.key);
+        if (!registry[ids.id]) {
+            if (registryCount > 800) { registry = {}; registryCount = 0; }
+            registryCount++;
+        }
+        registry[ids.id] = ids.key;
+    }
+
+    function elementRoute(element) {
+        let routeValue = element.getAttribute("href") || element.getAttribute("data-route")
+            || (element.dataset && element.dataset.page ? "/" + element.dataset.page : "");
+        if (!routeValue) {
+            const onclickAttr = element.getAttribute("onclick") || "";
+            const goMatch = onclickAttr.match(/BedContext\.go\(\s*['"]([^'"]+)['"]/i);
+            if (goMatch) routeValue = "/" + goMatch[1].replace(/^\/+/, "");
+        }
+        if (!routeValue || routeValue.trim() === "#") return "";
+        try {
+            const url = new URL(routeValue, window.location.href);
+            if (url.origin !== window.location.origin) return "";
+            ["BedInfo", "Unified", "UnifiedAI", "token", "patient", "user", "email", "uhid"]
+                .forEach(function (param) { url.searchParams.delete(param); });
+            return (url.pathname + url.search).slice(0, 120);
+        } catch (error) {
+            return "";
+        }
+    }
+
+    function cartContext() {
+        const cart = window.currentCart;
+        const hasCartObject = !!cart && typeof cart === "object";
+        const lines = [];
+        let count = 0;
+        if (hasCartObject) {
+            Object.keys(cart).slice(0, 60).forEach(function (key) {
+                const entry = cart[key];
+                const qty = entry ? Number(entry.qty) || 0 : 0;
+                if (qty <= 0) return;
+                count += qty;
+                const parts = key.split("_");
+                lines.push({
+                    foodId: parts[0],
+                    meal: parts.slice(1).join("_"),
+                    qty: qty,
+                    name: normalizeText(entry.name || entry.foodName || entry.title || "").slice(0, 60)
+                });
+            });
+        }
+        const countEl = document.querySelector("#cartCount, .cart-count, [data-cart-count]");
+        const totalEl = document.querySelector("#cartTotal, .cart-total, [data-cart-total]");
+        if (!hasCartObject && !countEl && !totalEl) return null;
+        const summary = { count: count, lines: lines };
+        if (!count && countEl) summary.count = parseInt(String(countEl.textContent || "").replace(/[^0-9]/g, ""), 10) || 0;
+        if (totalEl) summary.total = normalizeText(totalEl.textContent).slice(0, 30);
+        return summary;
+    }
+
     function homePageContext() {
         const bedContext = window.BedContext && window.BedContext.get ? window.BedContext.get() : {};
-        const text = function (element) {
+        const text = function (element, maxLen) {
+            const limit = maxLen || 100;
             let value = String(typeof element === "string" ? element : element && (
                 element.getAttribute("aria-label") || element.getAttribute("title")
                 || element.value || element.innerText || element.textContent) || "")
@@ -111,63 +367,70 @@
                     const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
                     value = value.replace(new RegExp(escaped, "ig"), "[redacted]");
                 });
-            return value.slice(0, 180);
+            return value.slice(0, limit);
         };
         const isVisible = function (element) {
-            if (element.closest("[hidden], [aria-hidden='true'], #unifiedAiFloatingBar, #unifiedAiTestPanel, #unifiedAiTestLauncher, #callLayer")) return false;
+            if (element.closest("[hidden], [aria-hidden='true'], #unifiedAiFloatingBar, #unifiedAiTestPanel, #unifiedAiTestLauncher, #callLayer, #endedLayer, .idle-layer, .modal-overlay, .rs-modal-overlay, .video-overlay, #autoStartLoader")) return false;
             const style = window.getComputedStyle(element);
-            if (style.display === "none" || style.visibility === "hidden" || !element.getClientRects().length) return false;
+            if (style.visibility === "hidden") return false;
+            if (isHiddenOnlyByCallOverlay(element)) return true;
+            if (style.display === "none" || !element.getClientRects().length) return false;
             for (let ancestor = element; ancestor && ancestor !== document.documentElement; ancestor = ancestor.parentElement) {
                 const rect = ancestor.getBoundingClientRect();
                 if (rect.width && (rect.right <= 0 || rect.left >= window.innerWidth)) return false;
             }
             return true;
         };
+
+        const usedActionIds = {};
+        const usedFieldIds = {};
+        const usedChoiceIds = {};
+        const seenRoutes = new Set();
+
         const actionElements = Array.from(document.querySelectorAll(
-            "button, a[href], [role='button'], [role='tab'], summary, input[type='button'], input[type='submit'], input[type='reset'], [onclick], [data-action], [data-route], .navBtn, .service-card, .food-card, .order-card, .selection-card, .timing-card"
+            "button, a[href], [role='button'], [role='tab'], summary, input[type='button'], input[type='submit'], input[type='reset'], [onclick], [data-action], [data-route], .navBtn, .service-card, .food-card, .bottom-card, .patient-status-card, .patfeedback-card, .order-card, .selection-card, .timing-card"
         ))
-            // The notification bell is user-owned: never publish it as an AI-clickable control.
-            // The AI reads notifications with notification.list, which does not open the drawer.
             .filter(function (element) { return element.id !== "mobileNotificationTrigger"; })
             .filter(isVisible)
-            .slice(0, 180);
+            .slice(0, 150);
+
         const actions = actionElements
-            .map(function (element, index) {
-                let label = text(element);
-                const parent = element.closest(".card, .service-card, .food-card, .order-card, .selection-card, .timing-card");
+            .map(function (element) {
+                const headingEl = element.querySelector("h1, h2, h3, h4, .card-title, .service-title, .food-title");
+                let label = headingEl ? text(headingEl, 80) : text(element, 90);
+                const parent = element.closest(CARD_SELECTOR);
                 const parentName = parent && parent.querySelector("h3, h4, .service-title, .food-title");
-                const name = parentName && text(parentName);
+                const name = parentName && text(parentName, 60);
                 if (name && label.length < 20 && !label.toLowerCase().includes(name.toLowerCase())) label += " " + name;
                 if (!label) {
                     const image = element.querySelector("img[alt]");
-                    label = image ? text(image) : "";
+                    label = image ? text(image, 80) : "";
                 }
                 if (!label) return null;
 
-                const targetId = "home-action-" + index;
-                if (element.getAttribute("data-unified-ai-target") !== targetId) {
-                    element.setAttribute("data-unified-ai-target", targetId);
+                const resolvedRoute = text(elementRoute(element), 120);
+                if (isBlockedElement(element, label, resolvedRoute)) return null;
+
+                if (resolvedRoute) {
+                    const routeKey = resolvedRoute.replace(/\/+$/, "").toLowerCase();
+                    if (seenRoutes.has(routeKey)) return null;
+                    seenRoutes.add(routeKey);
                 }
+
+                const ids = makeId("home-action-", element, label, usedActionIds, "", resolvedRoute);
+                tag(element, "data-unified-ai-target", ids);
+
                 const action = {
                     label: label,
                     disabled: !!element.disabled || element.getAttribute("aria-disabled") === "true",
-                    targetId: targetId
+                    targetId: ids.id
                 };
-                const routeValue = element.getAttribute("href") || element.getAttribute("data-route")
-                    || (element.dataset && element.dataset.page ? "/" + element.dataset.page : "");
-                if (routeValue && routeValue.trim() !== "#") {
-                    try {
-                        const url = new URL(routeValue, window.location.href);
-                        if (url.origin === window.location.origin) {
-                            ["BedInfo", "Unified", "UnifiedAI", "token", "patient", "user", "email", "uhid"]
-                                .forEach(function (name) { url.searchParams.delete(name); });
-                            action.route = text(url.pathname + url.search);
-                        }
-                    } catch (error) { }
-                }
+                if (name && name.toLowerCase() !== label.toLowerCase()) action.group = name;
+                if (resolvedRoute) action.route = resolvedRoute;
                 return action;
             })
             .filter(Boolean);
+
         const fields = Array.from(document.querySelectorAll(
             "input:not([type='hidden']):not([type='password']):not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not([type='radio']):not([type='file']), textarea, [contenteditable='true']"
         ))
@@ -178,24 +441,47 @@
                     && !element.closest(".patient-info, .patient-details, [data-patient-info]");
             })
             .slice(0, 50)
-            .map(function (field, index) {
+            .map(function (field) {
                 const labels = Array.from(field.labels || []).map(function (label) { return label.textContent; });
-                const targetId = "home-field-" + index;
-                if (field.getAttribute("data-unified-ai-field") !== targetId) {
-                    field.setAttribute("data-unified-ai-field", targetId);
-                }
+                const fieldLabel = text(field.getAttribute("aria-label") || labels.join(" ")
+                    || field.getAttribute("placeholder") || field.name || field.id || "Text field", 80);
+                const ids = makeId("home-field-", field, fieldLabel, usedFieldIds, "", "");
+                tag(field, "data-unified-ai-field", ids);
                 return {
-                    targetId: targetId,
-                    label: text(field.getAttribute("aria-label") || labels.join(" ")
-                        || field.getAttribute("placeholder") || field.name || field.id || "Text field"),
-                    placeholder: text(field.getAttribute("placeholder") || "")
+                    targetId: ids.id,
+                    label: fieldLabel,
+                    placeholder: text(field.getAttribute("placeholder") || "", 60)
                 };
             });
-        return {
+
+        const choices = Array.from(document.querySelectorAll("input[type='checkbox'], input[type='radio']"))
+            .filter(isVisible)
+            .slice(0, 60)
+            .map(function (input) {
+                const labels = Array.from(input.labels || []).map(function (label) { return label.textContent; });
+                const choiceLabel = text(input.getAttribute("aria-label") || labels.join(" ") || input.value || input.name || input.id, 80);
+                if (!choiceLabel || isBlockedElement(input, choiceLabel, "")) return null;
+                const ids = makeId("home-choice-", input, choiceLabel, usedChoiceIds, (input.name || "") + "|" + (input.value || ""), "");
+                tag(input, "data-unified-ai-choice", ids);
+                return {
+                    targetId: ids.id,
+                    label: choiceLabel,
+                    checked: !!input.checked,
+                    disabled: !!input.disabled || input.getAttribute("aria-disabled") === "true"
+                };
+            })
+            .filter(Boolean);
+
+        const context = {
             route: "/Home/Index",
             title: document.title,
             headings: Array.from(document.querySelectorAll("#pageContent h1, #pageContent h2, #pageContent h3"))
-                .map(text).filter(Boolean).slice(0, 20),
+                .filter(function (heading) {
+                    return !heading.closest(".modal-overlay, .rs-modal-overlay, .video-overlay, #endedLayer, .idle-layer");
+                })
+                .map(function (el) { return text(el, 80); })
+                .filter(Boolean)
+                .slice(0, 20),
             controls: Array.from(document.querySelectorAll("select"))
                 .filter(isVisible)
                 .filter(function (select) {
@@ -208,40 +494,39 @@
                     const labels = Array.from(select.labels || []).map(function (label) { return label.textContent; });
                     return {
                         id: select.id || "",
-                        label: text(select.getAttribute("aria-label") || labels.join(" ") || select.name || select.id),
+                        label: text(select.getAttribute("aria-label") || labels.join(" ") || select.name || select.id, 60),
                         selected: select.options[select.selectedIndex]
-                            ? { value: text(select.value), label: text(select.options[select.selectedIndex].textContent) }
+                            ? { value: text(select.value, 60), label: text(select.options[select.selectedIndex].textContent, 60) }
                             : null,
                         options: Array.from(select.options).slice(0, 60).map(function (option) {
-                            return { value: text(option.value), label: text(option.textContent), disabled: option.disabled };
+                            return { value: text(option.value, 60), label: text(option.textContent, 60), disabled: option.disabled };
                         })
                     };
                 }),
+            choices: choices,
             fields: fields,
-            items: Array.from(document.querySelectorAll("#pageContent .card, #pageContent [data-route], #pageContent [data-page]"))
+            items: Array.from(document.querySelectorAll("#pageNav .navBtn, #pageNav [data-route], #pageNav [data-page], #pageContent .card, #pageContent .food-card, #pageContent .bottom-card, #pageContent .service-card, #pageContent [data-route], #pageContent [data-page]"))
                 .filter(isVisible)
-                .slice(0, 100)
+                .slice(0, 60)
                 .map(function (item) {
-                    const name = text(item.querySelector("h1, h2, h3, h4, .card-title") || item);
-                    const route = item.getAttribute("data-route")
-                        || (item.dataset && item.dataset.page ? "/" + item.dataset.page : "");
+                    const name = text(item.querySelector("h1, h2, h3, h4, .card-title") || item, 70);
+                    const route = text(elementRoute(item), 120);
                     const result = { name: name, label: name, disabled: !!item.disabled };
-                    if (route) {
-                        try {
-                            const url = new URL(route, window.location.href);
-                            if (url.origin === window.location.origin) result.route = text(url.pathname);
-                        } catch (error) { }
-                    }
+                    if (route) result.route = route.split("?")[0];
+                    if (isBlockedElement(item, result.label, result.route)) return null;
                     return result;
                 })
-                .filter(function (item) { return item.label; }),
+                .filter(function (item) { return item && item.label; }),
             actions: actions
         };
+
+        const cart = cartContext();
+        if (cart) context.cart = cart;
+        return context;
     }
 
-    function sendCurrentPageContext() {
-        if (simulatedSession || document.body.getAttribute("data-state") !== "connected"
-            || typeof window.sendVoiceAgentMessage !== "function") return;
+    function sendCurrentPageContext(forceImmediate) {
+        if (!isVoiceConnected()) return;
         const context = frameLayer.classList.contains("is-open") ? latestFrameContext : homePageContext();
         if (frameLayer.classList.contains("is-open") && context && frame.contentWindow) {
             try {
@@ -253,16 +538,13 @@
         if (!context) return;
         const signature = JSON.stringify(context);
         if (signature === lastSentContext) return;
-        // Rate limit: the clock, call countdown, badges etc. change the DOM constantly.
-        // Send the LATEST context once the gap has passed instead of one message per change.
-        // A NEW page must reach the AI at once; only repeat updates of the same page are rate limited.
         const routeChanged = String(context.route || "") !== lastContextRoute;
-        const wait = routeChanged ? 0 : CONTEXT_MIN_GAP_MS - (Date.now() - lastContextSentAt);
+        const wait = (forceImmediate || routeChanged) ? 0 : CONTEXT_MIN_GAP_MS - (Date.now() - lastContextSentAt);
         if (wait > 0) {
             if (!contextRetryTimer) {
                 contextRetryTimer = setTimeout(function () {
                     contextRetryTimer = null;
-                    sendCurrentPageContext();
+                    sendCurrentPageContext(false);
                 }, wait);
             }
             return;
@@ -317,9 +599,9 @@
                 statusText.textContent = simulatedSession
                     ? "Test simulation"
                     : voiceNavSession
-                    ? "Voice navigation"
-                    : callStatus && callStatus.textContent.trim()
-                    || (state === "connecting" ? "Connecting..." : "Listening...");
+                        ? "Voice navigation"
+                        : callStatus && callStatus.textContent.trim()
+                        || (state === "connecting" ? "Connecting..." : "Listening...");
             }
             if (barMicButton) {
                 const muted = !!(micButton && micButton.classList.contains("muted"));
@@ -331,42 +613,63 @@
                 barMicButton.disabled = simulatedSession || voiceNavSession || state !== "connected";
             }
         }
-        if (state === "connected" && !simulatedSession) sendCurrentPageContext();
+        if (state === "connected" && !simulatedSession) sendCurrentPageContext(false);
     }
 
     function showChat() {
         frameLayer.classList.remove("is-open");
         frameLayer.setAttribute("aria-hidden", "true");
+        resetModuleFrame();
         setCallPresentation("full");
         updateFloatingBar();
+        notifyTestContextChanged();
     }
 
     function showHomePreservingCall() {
         frameLayer.classList.remove("is-open");
         frameLayer.setAttribute("aria-hidden", "true");
+        resetModuleFrame();
         setCallPresentation(isRealCallActive() ? "minimized" : "full");
         updateFloatingBar();
+        notifyTestContextChanged();
+    }
+
+    const recentRequests = new Map();
+
+    function isDuplicateRequest(action) {
+        const id = action && action.request_id;
+        if (!id) return false;
+        const now = Date.now();
+        recentRequests.forEach(function (entry, key) { if (now - entry.time > 60000) recentRequests.delete(key); });
+        if (recentRequests.has(id)) return true;
+        recentRequests.set(id, { time: now, name: action.action });
+        return false;
     }
 
     function reportResult(action, success, result, error) {
         if (!action || !action.request_id) return;
+        const known = recentRequests.get(action.request_id);
         const response = {
             request_id: action.request_id,
+            action: action.action || (known && known.name) || "",
             success: !!success,
             result: result || null,
             error: error || null
         };
+        sendCurrentPageContext(true);
+        notifyTestContextChanged();
         window.dispatchEvent(new CustomEvent("unified-ai:action-result", { detail: response }));
-        if (simulatedSession || document.body.getAttribute("data-state") !== "connected"
-            || typeof window.sendVoiceAgentMessage !== "function") return;
+        if (!isVoiceConnected()) return;
 
         window.sendVoiceAgentMessage(Object.assign({ type: "app_action_result" }, response));
     }
 
     function loadFrameUrl(targetUrl, target, action) {
+        clearPendingNavigation(false, null, "Replaced by a newer navigation.");
         latestFrameContext = null;
         lastSentContext = "";
         activeTarget = target;
+        frame.style.visibility = "hidden";
         frameLayer.classList.add("is-open");
         frameLayer.setAttribute("aria-hidden", "false");
         if (isRealCallActive()) setCallPresentation("minimized");
@@ -376,7 +679,20 @@
         });
         pendingActions = [];
 
-        if (action && action.action !== "navigate") pendingActions.push(action);
+        if (action) {
+            if (action.action === "navigate" || action.action === "food.intent") {
+                pendingNavigation = {
+                    action: action,
+                    result: { target: target, path: targetUrl.pathname },
+                    fallbackTimer: null,
+                    timeoutTimer: setTimeout(function () {
+                        clearPendingNavigation(false, null, "The destination page took too long to load.");
+                    }, NAVIGATION_TIMEOUT_MS)
+                };
+            } else {
+                pendingActions.push(action);
+            }
+        }
 
         frameReady = false;
         updateFloatingBar();
@@ -387,31 +703,22 @@
     }
 
     function openModule(target, action) {
-        const route = routes[target];
+        const route = resolveRoute(target);
         if (!route) {
             reportResult(action, false, null, "Unsupported module.");
             return false;
         }
-
-        const targetUrl = new URL(route, window.location.origin);
-        const bedContext = window.BedContext && window.BedContext.get
-            ? window.BedContext.get()
-            : {};
-        const bedInfo = bedContext.bedInfo || new URLSearchParams(window.location.search).get("BedInfo");
-        if (bedInfo) targetUrl.searchParams.set("BedInfo", bedInfo);
-        const tenantId = bedContext.tenantId || pageParams.get("XTenantID") || sessionStorage.getItem("XTenantID");
-        const region = bedContext.region || pageParams.get("region") || sessionStorage.getItem("region");
-        if (tenantId) targetUrl.searchParams.set("XTenantID", tenantId);
-        if (region) targetUrl.searchParams.set("region", region);
-        targetUrl.searchParams.set("Unified", "1");
-        targetUrl.searchParams.set("UnifiedAI", "1");
-
-        return loadFrameUrl(targetUrl, target, action);
+        const targetUrl = withContext(new URL(route, window.location.origin));
+        if (action && (action.action === "navigate" || action.action === "food.intent") && alreadyOnPath(targetUrl)) {
+            reportResult(action, true, { target: target, path: targetUrl.pathname, already: true });
+            return true;
+        }
+        return loadFrameUrl(targetUrl, routeTargetForPath(route), action || null);
     }
 
     function openAppPage(page, extra) {
         const url = new URL(window.BedContext.url(page, extra), window.location.origin);
-        if (!normalizeAppOrigin(url)) return false;
+        if (!normalizeAppOrigin(url) || BLOCKED_ROUTE_REGEX.test(url.pathname)) return false;
         if (/^\/(?:home(?:\/index)?|ai\/chat)\/?$/i.test(url.pathname)) {
             showHomePreservingCall();
             return true;
@@ -419,19 +726,11 @@
         if (/^\/FoodDining(?:\/Index)?\/?$/i.test(url.pathname)) {
             url.pathname = "/FoodDining/FoodDining";
         }
-        const bedContext = window.BedContext.get ? window.BedContext.get() : {};
-        const bedInfo = bedContext.bedInfo || pageParams.get("BedInfo");
-        if (bedInfo) url.searchParams.set("BedInfo", bedInfo);
-        const tenantId = bedContext.tenantId || pageParams.get("XTenantID") || sessionStorage.getItem("XTenantID");
-        const region = bedContext.region || pageParams.get("region") || sessionStorage.getItem("region");
-        if (tenantId) url.searchParams.set("XTenantID", tenantId);
-        if (region) url.searchParams.set("region", region);
-        url.searchParams.set("Unified", "1");
-        url.searchParams.set("UnifiedAI", "1");
+        withContext(url);
         return loadFrameUrl(url, routeTargetForPath(url.pathname), null);
     }
 
-    function openAppUrl(value) {
+    function openAppUrl(value, navAction) {
         const path = String(value || "").trim();
         if (!path) return null;
         let targetUrl;
@@ -441,63 +740,25 @@
             return null;
         }
         if (!normalizeAppOrigin(targetUrl) || !targetUrl.pathname.startsWith("/")) return null;
+        if (BLOCKED_ROUTE_REGEX.test(targetUrl.pathname)) return null;
+
         if (/^\/FoodDining(?:\/Index)?\/?$/i.test(targetUrl.pathname)) {
             targetUrl.pathname = "/FoodDining/FoodDining";
         }
         if (/\/(?:home(?:\/index)?|ai\/chat)\/?$/i.test(targetUrl.pathname)) {
             showHomePreservingCall();
-            return { target: "home" };
+            if (navAction) reportResult(navAction, true, { target: "home", path: "/Home/Index" });
+            return { target: "home", deferred: true };
         }
 
-        const bedContext = window.BedContext && window.BedContext.get ? window.BedContext.get() : {};
-        const bedInfo = bedContext.bedInfo || pageParams.get("BedInfo");
         targetUrl.searchParams.delete("BedInfo");
-        if (bedInfo) targetUrl.searchParams.set("BedInfo", bedInfo);
-        const tenantId = bedContext.tenantId || pageParams.get("XTenantID") || sessionStorage.getItem("XTenantID");
-        const region = bedContext.region || pageParams.get("region") || sessionStorage.getItem("region");
-        if (tenantId) targetUrl.searchParams.set("XTenantID", tenantId);
-        if (region) targetUrl.searchParams.set("region", region);
-        targetUrl.searchParams.set("Unified", "1");
-        targetUrl.searchParams.set("UnifiedAI", "1");
-        loadFrameUrl(targetUrl, routeTargetForPath(targetUrl.pathname), null);
-        return { path: targetUrl.pathname };
-    }
-
-    function routeTargetForPath(path) {
-        const normalized = String(path || "").replace(/^\/+|\/+$/g, "").toLowerCase();
-        const routeTargets = {
-            "roomcomfort": "room_comfort",
-            "roomcomfort/index": "room_comfort",
-            "logisitics": "logistics",
-            "logisitics/index": "logistics",
-            "mydailycare": "video_request",
-            "mydailycare/index": "video_request",
-            "medication": "medications",
-            "medication/index": "medications",
-            "appointments": "appointments",
-            "appointments/index": "appointments",
-            "mylibrary": "my_library",
-            "mylibrary/index": "my_library",
-            "discharge": "discharge",
-            "discharge/index": "discharge",
-            "fooddining": "food_explore",
-            "fooddining/fooddining": "food_explore",
-            "fooddining/otherservices": "food_other_services",
-            "fooddining/foodordering": "food_order",
-            "fooddining/patientordermode": "food_order",
-            "fooddining/menuitems": "food_order",
-            "fooddining/revieworder": "food_order",
-            "fooddining/myorders": "food_order",
-            "overallfeedback": "feedback",
-            "overallfeedback/index": "feedback"
-        };
-        return routeTargets[normalized] || ("page:" + normalized);
-    }
-
-    function normalizeAppOrigin(url) {
-        if (url.protocol !== window.location.protocol || url.hostname !== window.location.hostname) return false;
-        if (url.port !== window.location.port) url.port = window.location.port;
-        return url.origin === window.location.origin;
+        withContext(targetUrl);
+        if (navAction && alreadyOnPath(targetUrl)) {
+            reportResult(navAction, true, { target: routeTargetForPath(targetUrl.pathname), path: targetUrl.pathname, already: true });
+            return { path: targetUrl.pathname, deferred: true };
+        }
+        loadFrameUrl(targetUrl, routeTargetForPath(targetUrl.pathname), navAction || null);
+        return { path: targetUrl.pathname, deferred: !!navAction };
     }
 
     function dispatchToModule(target, action) {
@@ -508,70 +769,128 @@
         }
     }
 
+    function isElementInteractable(element) {
+        if (!element || element.closest("#unifiedAiModuleLayer")) return false;
+        const style = window.getComputedStyle(element);
+        if (style.visibility === "hidden") return false;
+        if (isHiddenOnlyByCallOverlay(element)) return true;
+        return style.display !== "none" && element.getClientRects().length > 0;
+    }
+
     function findUiTarget(attribute, targetId) {
+        if (!targetId) return null;
         return Array.from(document.querySelectorAll("[" + attribute + "]")).find(function (element) {
-            if (element.getAttribute(attribute) !== targetId || element.closest("#unifiedAiModuleLayer")) return false;
-            const style = window.getComputedStyle(element);
-            return style.display !== "none" && style.visibility !== "hidden" && element.getClientRects().length > 0;
-        });
+            return element.getAttribute(attribute) === targetId && isElementInteractable(element);
+        }) || null;
+    }
+
+    function findByKey(attribute, keyHash) {
+        if (!keyHash) return null;
+        const matches = Array.from(document.querySelectorAll("[" + attribute + "][data-uai-key='" + keyHash + "']")).filter(isElementInteractable);
+        return matches.length === 1 ? matches[0] : null;
+    }
+
+    function findTargetByLabelFallback(action, contextKey, attribute) {
+        const expected = normalizeText(action.label).toLowerCase();
+        if (!expected) return null;
+        const loose = neutralText(expected);
+        const context = homePageContext();
+        const list = (context && context[contextKey] ? context[contextKey] : []).filter(function (item) { return !item.disabled; });
+        let matches = list.filter(function (item) { return normalizeText(item.label).toLowerCase() === expected; });
+        if (matches.length !== 1 && loose) {
+            matches = list.filter(function (item) { return neutralText(item.label) === loose; });
+        }
+        if (matches.length !== 1) return null;
+        return findUiTarget(attribute, matches[0].targetId);
+    }
+
+    function resolveHostTarget(attribute, action, contextKey, callback) {
+        const previousKey = registry[action.targetId];
+        const deadline = Date.now() + 1500;
+        (function attempt() {
+            let target = findUiTarget(attribute, action.targetId);
+            if (!target) {
+                homePageContext();
+                target = findUiTarget(attribute, action.targetId)
+                    || findByKey(attribute, previousKey)
+                    || findTargetByLabelFallback(action, contextKey, attribute);
+            }
+            if (target) { callback(target); return; }
+            if (Date.now() < deadline) { setTimeout(attempt, 150); return; }
+            callback(null);
+        })();
     }
 
     function executeHostUIAction(action) {
         if (action.action === "ui.click") {
-            const target = findUiTarget("data-unified-ai-target", action.targetId);
-            if (!target || target.disabled || target.getAttribute("aria-disabled") === "true") {
-                reportResult(action, false, null, "The selected visible action is no longer available.");
-                return;
-            }
-            target.scrollIntoView({ behavior: "smooth", block: "center" });
-            target.click();
-            reportResult(action, true, { clicked: target.getAttribute("aria-label") || target.innerText || target.textContent });
+            resolveHostTarget("data-unified-ai-target", action, "actions", function (target) {
+                if (!target || target.disabled || target.getAttribute("aria-disabled") === "true") {
+                    reportResult(action, false, null, "The selected visible action is no longer available.");
+                    return;
+                }
+                const targetLabel = String(target.getAttribute("aria-label") || target.innerText || target.textContent || "").trim();
+                if (isBlockedElement(target, targetLabel, elementRoute(target))) {
+                    reportResult(action, false, null, "This action is blocked for patient session safety.");
+                    return;
+                }
+                if (isHiddenOnlyByCallOverlay(target)
+                    && !target.closest(".navBtn[data-page], a[href]")
+                    && !/BedContext\.go\(/i.test(target.getAttribute("onclick") || "")) {
+                    minimizeCall();
+                } else if (!isHiddenOnlyByCallOverlay(target)) {
+                    target.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+                target.click();
+                reportResult(action, true, { clicked: targetLabel.slice(0, 90) });
+            });
             return;
         }
 
         if (action.action === "ui.fill") {
-            const target = findUiTarget("data-unified-ai-field", action.targetId);
-            if (!target || target.disabled || target.readOnly) {
-                reportResult(action, false, null, "The selected visible field is no longer available.");
-                return;
-            }
-            const value = String(action.value == null ? "" : action.value).slice(0, 2000);
-            target.scrollIntoView({ behavior: "smooth", block: "center" });
-            target.focus({ preventScroll: true });
-            if (target.isContentEditable) target.textContent = value;
-            else target.value = value;
-            target.dispatchEvent(new Event("input", { bubbles: true }));
-            target.dispatchEvent(new Event("change", { bubbles: true }));
-            reportResult(action, true, { filled: action.label || target.getAttribute("aria-label") || target.name || target.id });
+            resolveHostTarget("data-unified-ai-field", action, "fields", function (target) {
+                if (!target || target.disabled || target.readOnly) {
+                    reportResult(action, false, null, "The selected visible field is no longer available.");
+                    return;
+                }
+                const value = String(action.value == null ? "" : action.value).slice(0, 2000);
+                target.scrollIntoView({ behavior: "smooth", block: "center" });
+                target.focus({ preventScroll: true });
+                if (target.isContentEditable) target.textContent = value;
+                else target.value = value;
+                target.dispatchEvent(new Event("input", { bubbles: true }));
+                target.dispatchEvent(new Event("change", { bubbles: true }));
+                reportResult(action, true, { filled: action.label || target.getAttribute("aria-label") || target.name || target.id });
+            });
         }
     }
 
     function executeHostChoiceAction(action) {
-        const target = findUiTarget("data-unified-ai-choice", action.targetId);
-        const input = target instanceof HTMLInputElement ? target : target && target.control;
-        if (!target || target.disabled || target.getAttribute("aria-disabled") === "true") {
-            reportResult(action, false, null, "The selected visible choice is no longer available.");
-            return;
-        }
-        if (!(input instanceof HTMLInputElement)) {
-            reportResult(action, false, null, "The selected choice is not a supported checkbox or radio control.");
-            return;
-        }
-        if (typeof action.checked !== "boolean" && action.checked !== "true" && action.checked !== "false") {
-            reportResult(action, false, null, "A checked state is required for this choice.");
-            return;
-        }
-        const requested = action.checked === true || action.checked === "true";
-        if (input.type === "radio" && !requested) {
-            reportResult(action, false, null, "A radio choice can only be selected, not cleared.");
-            return;
-        }
-        if (input.checked !== requested) target.click();
-        if (input.checked !== requested) {
-            reportResult(action, false, null, "The page did not accept the requested choice.");
-            return;
-        }
-        reportResult(action, true, { name: input.name || "", value: input.value || "", checked: input.checked });
+        resolveHostTarget("data-unified-ai-choice", action, "choices", function (target) {
+            const input = target instanceof HTMLInputElement ? target : target && target.control;
+            if (!target || target.disabled || target.getAttribute("aria-disabled") === "true") {
+                reportResult(action, false, null, "The selected visible choice is no longer available.");
+                return;
+            }
+            if (!(input instanceof HTMLInputElement)) {
+                reportResult(action, false, null, "The selected choice is not a supported checkbox or radio control.");
+                return;
+            }
+            if (typeof action.checked !== "boolean" && action.checked !== "true" && action.checked !== "false") {
+                reportResult(action, false, null, "A checked state is required for this choice.");
+                return;
+            }
+            const requested = action.checked === true || action.checked === "true";
+            if (input.type === "radio" && !requested) {
+                reportResult(action, false, null, "A radio choice can only be selected, not cleared.");
+                return;
+            }
+            if (input.checked !== requested) target.click();
+            if (input.checked !== requested) {
+                reportResult(action, false, null, "The page did not accept the requested choice.");
+                return;
+            }
+            reportResult(action, true, { name: input.name || "", value: input.value || "", checked: input.checked });
+        });
     }
 
     function selectHostOption(action) {
@@ -602,9 +921,11 @@
                 || String(option.textContent).trim().toLowerCase() === requested);
         });
         if (options.length !== 1) {
-            reportResult(action, false, { options: Array.from(select.options).filter(function (option) {
-                return !option.disabled;
-            }).map(function (option) { return { value: option.value, label: option.textContent.trim() }; }) },
+            reportResult(action, false, {
+                options: Array.from(select.options).filter(function (option) {
+                    return !option.disabled;
+                }).map(function (option) { return { value: option.value, label: option.textContent.trim() }; })
+            },
                 options.length ? "Dropdown option is ambiguous." : "Dropdown option was not found.");
             return;
         }
@@ -617,7 +938,6 @@
     function sendActionToFrame(action) {
         if (!frame.contentWindow || !frameReady) {
             pendingActions.push(action);
-            // never leave the AI waiting forever for a page that did not finish loading
             setTimeout(function () {
                 const index = pendingActions.indexOf(action);
                 if (index === -1) return;
@@ -633,16 +953,26 @@
         }, window.location.origin);
     }
 
-    // The same request can arrive twice (voice socket + HTTP event stream). Run it only once.
-    const recentRequestIds = new Map();
-    function isDuplicateRequest(action) {
-        const id = action && action.request_id;
-        if (!id) return false;
-        const now = Date.now();
-        recentRequestIds.forEach(function (time, key) { if (now - time > 60000) recentRequestIds.delete(key); });
-        if (recentRequestIds.has(id)) return true;
-        recentRequestIds.set(id, now);
-        return false;
+    function foodActionPath(action, currentRoute) {
+        const map = {
+            "food.other_service": "/FoodDining/OtherServices",
+            "food.select_order_type": "/FoodDining/FoodOrdering",
+            "food.select_mode": "/FoodDining/PatientOrderMode",
+            "food.select_meal": "/FoodDining/MenuItems",
+            "food.select_vendor": "/FoodDining/MenuItems",
+            "food.select_diet": "/FoodDining/MenuItems",
+            "food.select_language": "/FoodDining/MenuItems",
+            "food.list_menu": "/FoodDining/MenuItems",
+            "food.add_item": "/FoodDining/MenuItems",
+            "food.set_quantity": "/FoodDining/MenuItems",
+            "food.remove_item": "/FoodDining/MenuItems",
+            "food.review_order": "/FoodDining/MenuItems",
+            "food.submit_order": "/FoodDining/MenuItems"
+        };
+        if (action.action === "food.submit_order" && /\/FoodDining\/ReviewOrder\/?$/i.test(currentRoute)) {
+            return "/FoodDining/ReviewOrder";
+        }
+        return map[action.action] || "";
     }
 
     function handleAction(action) {
@@ -664,26 +994,19 @@
                 reportResult(action, false, null, "Food intent must be 'explore' or 'order'.");
                 return;
             }
-            const opened = openModule(target);
-            if (opened) reportResult(action, true, { target: target });
+            openModule(target, action);
             return;
         }
 
         if (action.action === "navigate") {
-            let opened = false;
-            if (routes[action.target]) {
-                opened = openModule(action.target);
-            } else {
-                const destination = action.path || action.url || action.target;
-                const result = openAppUrl(destination);
-                if (result) {
-                    opened = true;
-                    reportResult(action, true, result);
-                } else {
-                    reportResult(action, false, null, "The requested page is not a valid same-site route.");
-                }
+            if (action.target && resolveRoute(action.target)) {
+                openModule(action.target, action);
+                return;
             }
-            if (opened && routes[action.target]) reportResult(action, true, { target: action.target });
+            const destination = action.path || action.url || action.target;
+            if (!openAppUrl(destination, action)) {
+                reportResult(action, false, null, "The requested page is not a valid same-site route.");
+            }
             return;
         }
 
@@ -709,7 +1032,7 @@
                 logistics: "logistics",
                 food_other_services: "food_other_services"
             };
-            const target = requestTargets[action.module];
+            const target = requestTargets[action.module] || (resolveRoute(action.module) ? action.module : null);
             if (!target) {
                 reportResult(action, false, null, "Request module is not supported on this page.");
                 return;
@@ -731,11 +1054,6 @@
             return;
         }
 
-        if (action.action === "feedback.start") {
-            dispatchToModule("feedback", action);
-            return;
-        }
-
         if (action.action.indexOf("feedback.") === 0) {
             dispatchToModule("feedback", action);
             return;
@@ -743,24 +1061,7 @@
 
         if (action.action.indexOf("food.") === 0) {
             const currentRoute = String(latestFrameContext && latestFrameContext.route || "");
-            const foodActionRoutes = {
-                "food.other_service": "/FoodDining/OtherServices",
-                "food.select_order_type": "/FoodDining/FoodOrdering",
-                "food.select_mode": "/FoodDining/PatientOrderMode",
-                "food.select_meal": "/FoodDining/MenuItems",
-                "food.select_vendor": "/FoodDining/MenuItems",
-                "food.select_diet": "/FoodDining/MenuItems",
-                "food.select_language": "/FoodDining/MenuItems",
-                "food.list_menu": "/FoodDining/MenuItems",
-                "food.add_item": "/FoodDining/MenuItems",
-                "food.set_quantity": "/FoodDining/MenuItems",
-                "food.remove_item": "/FoodDining/MenuItems",
-                "food.review_order": "/FoodDining/MenuItems",
-                "food.submit_order": "/FoodDining/MenuItems"
-            };
-            const targetPath = action.action === "food.submit_order" && /\/FoodDining\/ReviewOrder\/?$/i.test(currentRoute)
-                ? "/FoodDining/ReviewOrder"
-                : foodActionRoutes[action.action];
+            const targetPath = foodActionPath(action, currentRoute);
             if (!targetPath) {
                 reportResult(action, false, null, "Unsupported food action.");
                 return;
@@ -769,16 +1070,7 @@
                 && currentRoute.toLowerCase() === targetPath.toLowerCase()) {
                 sendActionToFrame(action);
             } else {
-                const targetUrl = new URL(targetPath, window.location.origin);
-                const bedContext = window.BedContext && window.BedContext.get ? window.BedContext.get() : {};
-                const bedInfo = bedContext.bedInfo || pageParams.get("BedInfo");
-                const tenantId = bedContext.tenantId || pageParams.get("XTenantID") || sessionStorage.getItem("XTenantID");
-                const region = bedContext.region || pageParams.get("region") || sessionStorage.getItem("region");
-                if (bedInfo) targetUrl.searchParams.set("BedInfo", bedInfo);
-                if (tenantId) targetUrl.searchParams.set("XTenantID", tenantId);
-                if (region) targetUrl.searchParams.set("region", region);
-                targetUrl.searchParams.set("Unified", "1");
-                targetUrl.searchParams.set("UnifiedAI", "1");
+                const targetUrl = withContext(new URL(targetPath, window.location.origin));
                 loadFrameUrl(targetUrl, routeTargetForPath(targetPath), action);
             }
             return;
@@ -788,15 +1080,29 @@
     }
 
     frame.addEventListener("load", function () {
+        if (!frameLayer.classList.contains("is-open") || isBlankFrame()) return;
         frameReady = true;
+        frame.style.visibility = "visible";
         while (pendingActions.length) {
             frame.contentWindow.postMessage({
                 type: "unified_ai_action",
                 action: pendingActions.shift()
             }, window.location.origin);
         }
+        if (pendingNavigation) {
+            clearTimeout(pendingNavigation.fallbackTimer);
+            pendingNavigation.fallbackTimer = setTimeout(function () {
+                if (!pendingNavigation) return;
+                clearPendingNavigation(true, { target: pendingNavigation.result.target, path: currentFramePath() || pendingNavigation.result.path });
+            }, 900);
+        }
         updateFloatingBar();
         notifyTestContextChanged();
+    });
+
+    frame.addEventListener("error", function () {
+        if (!frameLayer.classList.contains("is-open") || isBlankFrame()) return;
+        frame.style.visibility = "visible";
     });
 
     window.addEventListener("voice-agent:app-action", function (event) {
@@ -806,7 +1112,12 @@
         const detail = event.detail || {};
         if (!detail.connected) { lastSentContext = ""; lastContextRoute = ""; }
         updateFloatingBar();
-        if (detail.connected) sendCurrentPageContext();
+        if (detail.connected) sendCurrentPageContext(true);
+    });
+
+    window.addEventListener("unified-ai:order-confirmed", function (event) {
+        if (!isVoiceConnected()) return;
+        window.sendVoiceAgentMessage({ type: "app_order_confirmed", confirmation: event.detail || {} });
     });
 
     window.addEventListener("message", function (event) {
@@ -820,7 +1131,8 @@
             if (latestFrameContext && latestFrameContext.route) {
                 activeTarget = routeTargetForPath(latestFrameContext.route);
             }
-            sendCurrentPageContext();
+            resolvePendingNavigation();
+            sendCurrentPageContext(false);
             notifyTestContextChanged();
         } else if (event.data.type === "unified_ai_show_chat") {
             showChat();
@@ -841,8 +1153,14 @@
                 endVoiceNavSession();
                 return;
             }
+            suppressEndedUntil = Date.now() + 4000;
             if (typeof window.endChat === "function") window.endChat();
-            updateFloatingBar();
+            if (typeof window.setState === "function") {
+                window.setState("idle");
+            } else {
+                document.body.setAttribute("data-state", "idle");
+            }
+            showChat();
         });
     }
 
@@ -907,24 +1225,21 @@
         updateFloatingBar();
     });
 
+    const IGNORED_ATTRIBUTES = ["data-unified-ai-target", "data-unified-ai-field", "data-unified-ai-choice", "data-uai-key"];
     let homeContextTimer = null;
     const homeContextObserver = new MutationObserver(function (records) {
         if (frameLayer.classList.contains("is-open")) return;
         const relevantChanges = records.some(function (record) {
             const target = record.target instanceof Element ? record.target : record.target.parentElement;
             if (target && target.closest("#unifiedAiFloatingBar, #unifiedAiTestPanel, #unifiedAiTestLauncher")) return false;
-            return record.type !== "attributes"
-                || !["data-unified-ai-target", "data-unified-ai-field"].includes(record.attributeName);
+            return record.type !== "attributes" || !IGNORED_ATTRIBUTES.includes(record.attributeName);
         });
         if (!relevantChanges) return;
         if (homeContextTimer) clearTimeout(homeContextTimer);
         homeContextTimer = setTimeout(function () {
-            // Do NOT clear lastSentContext here. The signature check is what stops an
-            // unchanged page (clock tick, countdown, badge) from re-sending the full
-            // context to the voice server over and over, which could drop the call.
-            sendCurrentPageContext();
+            sendCurrentPageContext(false);
             notifyTestContextChanged();
-        }, 700);
+        }, 300);
     });
     homeContextObserver.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true });
 
@@ -933,9 +1248,12 @@
         const element = event.target instanceof Element ? event.target : null;
         const navButton = element && element.closest(".navBtn[data-page]");
         if (navButton) {
+            const page = navButton.getAttribute("data-page");
+            if (BLOCKED_ROUTE_REGEX.test("/" + String(page || "").replace(/^\/+/, ""))
+                || isBlockedElement(navButton, navButton.innerText || navButton.textContent, "")) return;
             event.preventDefault();
             event.stopImmediatePropagation();
-            openAppPage(navButton.getAttribute("data-page"));
+            openAppPage(page);
             return;
         }
         const link = element && element.closest("a[href]");
@@ -944,6 +1262,7 @@
         const targetUrl = new URL(link.href, window.location.href);
         if (!normalizeAppOrigin(targetUrl)
             || targetUrl.hash && targetUrl.pathname === window.location.pathname) return;
+        if (BLOCKED_ROUTE_REGEX.test(targetUrl.pathname)) return;
         if (/\/(?:home(?:\/index)?|ai\/chat)\/?$/i.test(targetUrl.pathname)) {
             event.preventDefault();
             event.stopImmediatePropagation();
@@ -951,17 +1270,12 @@
             return;
         }
 
-        const bedContext = window.BedContext && window.BedContext.get ? window.BedContext.get() : {};
-        const bedInfo = bedContext.bedInfo || pageParams.get("BedInfo");
-        if (bedInfo && !targetUrl.searchParams.has("BedInfo")) targetUrl.searchParams.set("BedInfo", bedInfo);
-        targetUrl.searchParams.set("Unified", "1");
-        targetUrl.searchParams.set("UnifiedAI", "1");
+        withContext(targetUrl);
         event.preventDefault();
         event.stopImmediatePropagation();
         loadFrameUrl(targetUrl, routeTargetForPath(targetUrl.pathname), null);
     }, true);
 
-    // ---- Voice navigation session (no AI): keeps the Home shell alive so pages open in the iframe ----
     function endVoiceNavSession() {
         if (!voiceNavSession) return false;
         voiceNavSession = false;
@@ -972,22 +1286,18 @@
         return true;
     }
 
-    // ---- Notification tap while Home is open: route inside the shell, never reload Home ----
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.addEventListener("message", function (event) {
             const data = event.data || {};
             if (data.type !== "push-open" || !data.url) return;
             if (isCallActive()) {
-                if (!openAppUrl(data.url)) console.warn("Notification target is not a valid same-site route:", data.url);
+                if (!openAppUrl(data.url, null)) console.warn("Notification target is not a valid same-site route:", data.url);
             } else {
                 window.location.href = data.url;
             }
         });
     }
 
-    // ---- A live call must never be unloaded by a top-level navigation ----
-    // A script doing location.href = "/SomePage" on the Home shell would drop the call, the microphone
-    // and the WebSocket. While a call is live, open that page inside the shell instead.
     if (window.navigation && typeof window.navigation.addEventListener === "function") {
         window.navigation.addEventListener("navigate", function (event) {
             if (!isRealCallActive() || !event.cancelable || event.hashChange || event.formData) return;
@@ -997,12 +1307,11 @@
             let destination;
             try { destination = new URL(event.destination.url); } catch (error) { return; }
             if (destination.origin !== window.location.origin) return;
-            if (/\/(?:log-?out|log-?in|prelanding)\b/i.test(destination.pathname)) return;   // leaving the app on purpose
-            if (openAppUrl(destination.toString())) event.preventDefault();
+            if (BLOCKED_ROUTE_REGEX.test(destination.pathname)) return;
+            if (openAppUrl(destination.toString(), null)) event.preventDefault();
         });
     }
 
-    // Refresh / closing the tab would end the call: ask first.
     window.addEventListener("beforeunload", function (event) {
         if (!isRealCallActive()) return;
         event.preventDefault();
@@ -1026,6 +1335,9 @@
         minimizeCall: minimizeCall,
         handleAction: handleAction,
         getCurrentContext: currentPageContext,
+        confirmOrder: function (detail) {
+            window.dispatchEvent(new CustomEvent("unified-ai:order-confirmed", { detail: Object.assign({ source: "page" }, detail || {}) }));
+        },
         startLocalTestSession: function () {
             if (!isLocalTestMode || document.body.getAttribute("data-state") === "connecting"
                 || document.body.getAttribute("data-state") === "connected") return false;
@@ -1048,30 +1360,28 @@
         isLocalTestMode: isLocalTestMode
     };
 
-    let endedStateTimer = null;
     const bodyObserver = new MutationObserver(function () {
         const state = document.body.getAttribute("data-state");
         if (state === "connecting" || state === "connected") {
             simulatedSession = false;
+            suppressEndedUntil = 0;
             if (voiceNavSession) endVoiceNavSession();
-            clearTimeout(endedStateTimer);
-            endedStateTimer = null;
-        } else {
-            if (state === "ended") {
-                clearTimeout(endedStateTimer);
-                endedStateTimer = setTimeout(function () {
-                    endedStateTimer = null;
-                    if (document.body.getAttribute("data-state") === "ended") {
-                        document.body.setAttribute("data-state", "idle");
-                    }
-                }, 1800);
-            } else {
-                clearTimeout(endedStateTimer);
-                endedStateTimer = null;
-                if (state === "idle" && callPresentation === "minimized"
-                    && !frameLayer.classList.contains("is-open")) {
-                    setCallPresentation("full");
+        } else if (state === "ended") {
+            if (Date.now() < suppressEndedUntil
+                || callPresentation === "minimized"
+                || frameLayer.classList.contains("is-open")) {
+                suppressEndedUntil = Date.now() + 4000;
+                if (typeof window.setState === "function") {
+                    window.setState("idle");
+                } else {
+                    document.body.setAttribute("data-state", "idle");
                 }
+                showChat();
+                return;
+            }
+        } else if (state === "idle") {
+            if (callPresentation === "minimized" && !frameLayer.classList.contains("is-open")) {
+                setCallPresentation("full");
             }
         }
         updateFloatingBar();
@@ -1102,6 +1412,10 @@
             if (isCallActive()) {
                 if (normalized === "home" || normalized === "home/index" || normalized === "ai" || normalized === "ai/chat") {
                     showHomePreservingCall();
+                    return;
+                }
+                if (BLOCKED_ROUTE_REGEX.test("/" + normalized)) {
+                    originalGo(page, extra);
                     return;
                 }
                 openAppPage(page, extra);

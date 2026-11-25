@@ -1,5 +1,4 @@
-﻿
-var avatarParam = window.avatarParam ||
+﻿var avatarParam = window.avatarParam ||
     new URLSearchParams(window.location.search).get("avatar");
 
 window.avatarParam = avatarParam;
@@ -18,8 +17,11 @@ var AVATAR_IMAGE_SRC =
 
 window.AVATAR_IMAGE_SRC = AVATAR_IMAGE_SRC;
 
-function initializeAvatarUI() {
+function isEmbeddedInUnifiedHost() {
+    try { return window.parent !== window && !!window.parent.UnifiedAIHost; } catch (e) { return false; }
+}
 
+function initializeAvatarUI() {
     if (document.body) {
         document.body.setAttribute(
             "data-avatar-mode",
@@ -32,34 +34,37 @@ function initializeAvatarUI() {
     });
 }
 
-if (document.readyState === "loading") {
-
-    document.addEventListener("DOMContentLoaded", function () {
+if (!isEmbeddedInUnifiedHost()) {
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", function () {
+            initializeAvatarUI();
+        });
+    } else {
         initializeAvatarUI();
-    });
-
-} else {
-
-    initializeAvatarUI();
-
+    }
 }
 
-// =========================================================
-// CONFIG
-// =========================================================
 if (!window.APP_CONFIG) {
     console.warn("window.APP_CONFIG is missing — check that config.js is loaded before script.js.");
 }
 
 var CFG = window.APP_CONFIG || {};
 
+var SESSION_SECONDS = Number(CFG.SESSION_SECONDS) || 180;
 var SAMPLE_RATE = 24000;
-var PLAYBACK_LEAD_SECONDS = 0.05;   // jitter buffer for the first chunk after silence
 var MIC_FRAME_SAMPLES = 480;
 
 var BACKEND_HTTP = CFG.BACKEND_HTTP || '';
 var BACKEND_WS = CFG.BACKEND_WS || (BACKEND_HTTP ? BACKEND_HTTP.replace(/^http/i, "ws") : '');
 var PROFILE_API_URL = CFG.PROFILE_API_URL || '';
+
+var MAX_APP_MESSAGE_CHARS = Number(CFG.MAX_APP_MESSAGE_CHARS) || 16000;
+
+var APP_MESSAGE_DELAY_MS = CFG.APP_MESSAGE_DELAY_MS !== undefined ? Number(CFG.APP_MESSAGE_DELAY_MS) : 800;
+
+var MAX_WS_BUFFERED_BYTES = 256 * 1024;
+
+var CLIENT_HEARTBEAT_MS = Number(CFG.CLIENT_HEARTBEAT_MS) || 0;
 
 if (!BACKEND_HTTP || !BACKEND_WS) {
     console.error("APP_CONFIG.BACKEND_HTTP / BACKEND_WS are not set — calls will fail.");
@@ -87,7 +92,7 @@ function getWidgetUserId() {
 
 var body = null;
 var countdownTimer = null;
-var elapsedSeconds = 0;
+var timeLeft = SESSION_SECONDS;
 
 var idleBtn = null;
 var endChatBtn = null;
@@ -98,9 +103,7 @@ var homeBtn = null;
 var assistantBackBtn = null;
 var endedMicBtn = null;
 
-
 function initializeAvatarElements() {
-
     body = document.body;
 
     idleBtn = document.getElementById("idleBtn");
@@ -128,40 +131,37 @@ function setState(state) {
 
 function formatTime(s) {
     var m = Math.floor(s / 60);
-    return m + ":" + (s % 60).toString().padStart(2, "0");
+    return String(m).padStart(2, "0") + ":" + (s % 60).toString().padStart(2, "0");
 }
+
 function renderTimer() {
-    if (timerEl) timerEl.textContent = formatTime(elapsedSeconds);
+    var elapsed = Math.min(Math.max(SESSION_SECONDS - timeLeft, 0), SESSION_SECONDS);
+    if (timerEl) timerEl.textContent = formatTime(elapsed);
 }
 
 async function fetchProfileLanguage(id) {
-    if (!id || typeof PROFILE_API_URL === 'undefined') return null;
+    if (!id || !PROFILE_API_URL) return null;
     try {
-        var tenantId = window.BedContext.getTenantId();
-        if (!tenantId) {
-            console.warn("GetProfileOld failed: No TenantId in BedContext");
-            return null;
-        }
+        var headers = { "Content-Type": "application/json" };
+        var tenantId = window.BedContext && typeof window.BedContext.getTenantId === "function"
+            ? window.BedContext.getTenantId()
+            : null;
+        if (tenantId) headers["X-Tenant-ID"] = tenantId;
 
         var res = await fetch(PROFILE_API_URL, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-Tenant-ID": tenantId
-            },
-            body: JSON.stringify({ userId: String(id) })
+            headers: headers,
+            body: JSON.stringify({ userId: String(id), Status: "GET" })
         });
-
         if (!res.ok) throw new Error("HTTP " + res.status);
         var result = await res.json();
         if (!result.status || !result.data || !result.data.Language) return null;
         return result.data.Language;
     } catch (err) {
-        console.warn("GetProfileOld failed:", err.message);
+        console.warn("GetProfileOld failed — using region default language:", err.message);
         return null;
     }
 }
-
 
 var REGION_LANGUAGE_URL = "/data/region-language.json";
 var FALLBACK_COUNTRY_CODE = "IN";
@@ -214,9 +214,11 @@ async function loadRegionLanguages() {
     selectLanguage(defaultLang);
 }
 
-var languageReady = loadRegionLanguages().catch(function (err) {
-    console.warn("Language setup failed:", err);
-});
+var languageReady = isEmbeddedInUnifiedHost()
+    ? Promise.resolve()
+    : loadRegionLanguages().catch(function (err) {
+        console.warn("Language setup failed:", err);
+    });
 
 async function fetchToken() {
     var widgetUserId = getWidgetUserId();
@@ -232,7 +234,6 @@ async function fetchToken() {
     var dialect = widgetParams.get("dialect") || CFG.DIALECT || REGION_DIALECT[currentRegionCode];
 
     var payload = { user_id: widgetUserId };
-    // opt-in (config.js: SEND_SESSION_ID: true) once the voice backend accepts these two fields
     if (CFG.SEND_SESSION_ID && window.UnifiedAIBridge) {
         payload.session_id = window.UnifiedAIBridge.sessionId;
         payload.device_id = window.UnifiedAIBridge.deviceId;
@@ -242,112 +243,67 @@ async function fetchToken() {
     if (voice) payload.voice = voice;
     if (speed !== undefined && speed !== null && !isNaN(speed)) payload.speed = speed;
 
-    var res;
     try {
-        res = await fetch(BACKEND_HTTP + "/token", {
+        var res = await fetch(BACKEND_HTTP + "/token", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
+        if (!res.ok) {
+            console.error("/token returned " + res.status);
+            return null;
+        }
+        var data = await res.json();
+        return data.access_token || null;
     } catch (err) {
         console.error("/token unreachable:", err.message);
-        throw err;
+        return null;
     }
-
-    if (!res.ok) {
-        var tokenError = new Error("/token returned " + res.status);
-        tokenError.status = res.status;
-        tokenError.retryAfter = res.headers.get("Retry-After");
-        console.error(tokenError.message, tokenError.retryAfter ? "Retry-After: " + tokenError.retryAfter : "");
-        throw tokenError;
-    }
-
-    var data = await res.json();
-    if (!data || !data.access_token) throw new Error("/token response did not contain an access token.");
-    return data.access_token;
 }
 
-// =========================================================
-// AUDIO
-// =========================================================
 var ws = null;
 var pendingVoiceMessages = [];
-var reconnectTimer = null;
-var connectionTimeoutTimer = null;
-var voiceHeartbeatTimer = null;
-var statusTransitionTimer = null;
-var serverEndTimer = null;
-var lastVoicePongAt = null;
-var connectionInProgress = false;
-var callSessionActive = false;
-var callAccessToken = null;
-var tokenRequestAttemptedForSession = false;
-var callSessionGeneration = 0;
-var reconnectAttempts = 0;
 var audioContext = null;
 var mediaStream = null;
+var micSource = null;
 var micNode = null;
 var micSink = null;
 var highPassNode = null;
 var micMuted = false;
 var speakerMuted = false;
 var speakerGainNode = null;
+var serverEnding = false;
+var userEndedCall = false;
+var callSessionActive = false;
+var callSessionGeneration = 0;
+var connectionInProgress = false;
+var reconnectAttempts = 0;
+var shortCloseStreak = 0;
+var MAX_SHORT_CLOSES = 3;
+var AUTH_CLOSE_CODES = [1008, 4001, 4003, 4401, 4403];
+
+var reconnectTimer = null;
+var connectionTimeoutTimer = null;
+var statusTransitionTimer = null;
+var stableResetTimer = null;
+var serverEndTimer = null;
+var queueFlushTimer = null;
+var heartbeatTimer = null;
 
 var nextPlayTime = 0;
 var activeSources = [];
 var drainTimer = null;
-var stableResetTimer = null;
 
-// =========================================================
-// TOKEN REFRESH ON RECONNECT
-// The /token access token is a short-lived JWT. Reconnecting forever with the SAME
-// token fails once it has expired (or was single-use), which looks like endless
-// "Reconnecting...". Fetch a fresh one when it is about to expire, was refused, or
-// the last attempt never got as far as an open socket.
-// =========================================================
-var failedOpenStreak = 0;
-var forceTokenRefresh = false;
-var lastTokenFetchAt = 0;
-var AUTH_CLOSE_CODES = [1008, 4001, 4003, 4401, 4403];
-
-// A clean 1000 close right after opening is the voice service ending the session. One is normal
-// when navigating; several in a row is a dead session and must not become an endless retry loop.
-var shortCloseStreak = 0;
-var MAX_SHORT_CLOSES = 3;
-
-function tokenExpiresInMs(token) {
-    try {
-        var part = String(token).split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-        part += "=".repeat((4 - part.length % 4) % 4);
-        var payload = JSON.parse(atob(part));
-        return payload && payload.exp ? payload.exp * 1000 - Date.now() : Infinity;
-    } catch (e) {
-        return Infinity;
-    }
-}
-
-// =========================================================
-// SINGLE CALL OWNER
-// Two voice clients for the same bed (a second tab, or an app page loaded inside
-// the Home iframe without ?UnifiedAI=1) open a second /voice-assistant socket. Most
-// voice backends keep one live session per user, so the two sockets evict each
-// other and both "Reconnect" forever. Only ONE window may own the call.
-// =========================================================
 var callOwnerRelease = null;
 var callOwnerPending = false;
 
-function isEmbeddedInUnifiedHost() {
-    try { return window.parent !== window && !!window.parent.UnifiedAIHost; } catch (e) { return false; }
-}
-
 function claimCallOwnership() {
-    if (isEmbeddedInUnifiedHost()) return Promise.resolve(false);   // the Home page owns the call
-    if (callOwnerRelease) return Promise.resolve(true);             // already ours
-    if (!navigator.locks || !navigator.locks.request) return Promise.resolve(true);   // needs HTTPS/localhost
+    if (isEmbeddedInUnifiedHost()) return Promise.resolve(false);
+    if (callOwnerRelease) return Promise.resolve(true);
+    if (!navigator.locks || !navigator.locks.request) return Promise.resolve(true);
     return new Promise(function (resolve) {
         navigator.locks.request("dial50-voice-call", { ifAvailable: true }, function (lock) {
             if (!lock) { resolve(false); return; }
-            // hold the lock until End Call; the browser frees it automatically if the tab closes
             return new Promise(function (release) { callOwnerRelease = release; resolve(true); });
         }).catch(function () { resolve(true); });
     });
@@ -360,318 +316,114 @@ function releaseCallOwnership() {
     release();
 }
 
-// =========================================================
-// SILERO NEURAL VAD — browser-side ONNX Runtime Web
-// Original 24 kHz PCM16 audio continues to the backend unchanged.
-// A separate copy is resampled to 16 kHz only for Silero inference.
-// =========================================================
 var vadCfg = (CFG && CFG.VAD) || {};
 
-function loadExternalScriptOnce(src) {
-    if (window.ort) return Promise.resolve(window.ort);
-    if (window.__dial50OrtLoading) return window.__dial50OrtLoading;
-    window.__dial50OrtLoading = new Promise(function (resolve, reject) {
-        var existing = document.querySelector('script[data-dial50-ort="true"]');
-        if (existing) {
-            existing.addEventListener("load", function () {
-                window.ort ? resolve(window.ort) : reject(new Error("ONNX Runtime loaded but window.ort is unavailable."));
-            }, { once: true });
-            existing.addEventListener("error", function () { reject(new Error("Could not load ONNX Runtime Web.")); }, { once: true });
-            return;
-        }
-        var script = document.createElement("script");
-        script.src = src;
-        script.async = true;
-        script.dataset.dial50Ort = "true";
-        script.onload = function () {
-            window.ort ? resolve(window.ort) : reject(new Error("ONNX Runtime script loaded but window.ort is unavailable."));
-        };
-        script.onerror = function () {
-            window.__dial50OrtLoading = null;        // let the next attempt try again
-            script.remove();
-            reject(new Error("Failed to load ONNX Runtime Web from " + src));
-        };
-        document.head.appendChild(script);
-    });
-    return window.__dial50OrtLoading;
-}
-
-class SileroVoiceActivityDetector {
+class LocalVoiceActivityDetector {
     constructor(options) {
         options = options || {};
-        this.sampleRate = 16000;
-        this.frameSize = 512;
-        this.contextSize = 64;
-        this.threshold = typeof options.threshold === "number" ? options.threshold : 0.50;
-        this.negativeThreshold = typeof options.negativeThreshold === "number" ? options.negativeThreshold : 0.35;
-        this.bargeInThreshold = typeof options.bargeInThreshold === "number" ? options.bargeInThreshold : 0.65;
-        this.silenceDurationMs = typeof options.silenceDurationMs === "number" ? options.silenceDurationMs : 420;
-        this.speechStartDurationMs = typeof options.speechStartDurationMs === "number" ? options.speechStartDurationMs : 96;
+        this.sampleRate = options.sampleRate || 24000;
+        this.energyThreshold = typeof options.threshold === "number" ? options.threshold : 0.01;
+        this.endThreshold = typeof options.speechEndThreshold === "number" ? options.speechEndThreshold : 0.0072;
+        this.duckingThreshold = typeof options.duckingThreshold === "number" ? options.duckingThreshold : 0.065;
+        this.duckingEndThreshold = this.duckingThreshold * 0.72;
+        this.silenceDurationMs = typeof options.silenceDurationMs === "number" ? options.silenceDurationMs : 600;
+        this.speechStartDurationMs = typeof options.speechStartDurationMs === "number" ? options.speechStartDurationMs : 180;
         this.bargeInStartDurationMs = typeof options.bargeInStartDurationMs === "number" ? options.bargeInStartDurationMs : 220;
-        this.modelPath = options.modelPath || "/models/silero-vad.onnx";
-        this.ortScriptUrl = options.ortScriptUrl || "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js";
-        this.wasmPaths = options.wasmPaths || "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
-        this.session = null;
-        this.isReady = false;
-        this.isLoading = false;
-        this.loadPromise = null;
-        this.state = new Float32Array(2 * 128);
-        this.context = new Float32Array(this.contextSize);
-        this.audioFrame = new Float32Array(this.frameSize);
-        this.audioFrameCount = 0;
-        this.inferenceQueue = [];
-        this.inferenceRunning = false;
         this.isSpeaking = false;
-        this.speechTimeMs = 0;
         this.silenceTimeMs = 0;
-        this.lastProbability = 0;
-        this.lastError = null;
-        this.generation = 0;
+        this.speechTimeMs = 0;
+        this.lastRms = 0;
     }
 
-    async load() {
-        if (this.isReady) return true;
-        if (this.loadPromise) return this.loadPromise;
-        this.isLoading = true;
-        this.loadPromise = (async () => {
-            try {
-                var ort = await Promise.race([
-                    loadExternalScriptOnce(this.ortScriptUrl),
-                    new Promise(function (_, reject) {
-                        setTimeout(function () { reject(new Error("ONNX Runtime load timed out")); }, 12000);
-                    })
-                ]);
-                if (ort.env && ort.env.wasm) {
-                    ort.env.wasm.wasmPaths = this.wasmPaths;
-                    ort.env.wasm.numThreads = 1;
-                    ort.env.wasm.proxy = false;
-                }
-                this.session = await ort.InferenceSession.create(this.modelPath, {
-                    executionProviders: ["wasm"],
-                    graphOptimizationLevel: "all"
-                });
-                ["input", "state", "sr"].forEach((name) => {
-                    if (this.session.inputNames.indexOf(name) === -1) {
-                        throw new Error("Silero ONNX model is missing required input: " + name);
-                    }
-                });
-                ["output", "stateN"].forEach((name) => {
-                    if (this.session.outputNames.indexOf(name) === -1) {
-                        throw new Error("Silero ONNX model is missing required output: " + name);
-                    }
-                });
-                this.isReady = true;
-                this.lastError = null;
-                console.info("Dial50: Silero Neural VAD loaded successfully", {
-                    model: this.modelPath, runtime: "ONNX Runtime Web / WASM",
-                    sampleRate: this.sampleRate, frameSize: this.frameSize
-                });
-                return true;
-            } catch (err) {
-                this.lastError = err;
-                this.isReady = false;
-                this.session = null;
-                console.error("Dial50: Silero VAD failed to load or initialize. Check the ONNX model URL and model compatibility.", err);
-                return false;
-            } finally {
-                this.isLoading = false;
-                if (!this.isReady) this.loadPromise = null;   // allow a later retry instead of caching the failure
-            }
-        })();
-        return this.loadPromise;
-    }
-
-    resample24kTo16k(samples) {
-        var input = samples instanceof Int16Array ? samples : new Int16Array(samples);
-        var outputLength = Math.floor(input.length * 2 / 3);
-        var output = new Float32Array(outputLength);
-        for (var i = 0; i < outputLength; i++) {
-            var sourcePosition = i * 1.5;
-            var left = Math.floor(sourcePosition);
-            var right = Math.min(left + 1, input.length - 1);
-            var fraction = sourcePosition - left;
-            var a = input[left] / 32768;
-            var b = input[right] / 32768;
-            output[i] = a + (b - a) * fraction;
+    calculateRMS(samples) {
+        if (!samples || !samples.length) return 0;
+        var sumSquares = 0;
+        var count = 0;
+        for (var i = 0; i < samples.length; i += 2) {
+            var sample = samples[i];
+            sumSquares += sample * sample;
+            count++;
         }
-        return output;
+        if (!count) return 0;
+        var rms = Math.sqrt(sumSquares / count);
+        return samples instanceof Int16Array ? rms / 32768 : rms;
     }
 
-    enqueueAudio(samples16k, playbackActive) {
-        if (!this.isReady || !samples16k || !samples16k.length) return;
-        for (var i = 0; i < samples16k.length; i++) {
-            this.audioFrame[this.audioFrameCount++] = samples16k[i];
-            if (this.audioFrameCount === this.frameSize) {
-                this.inferenceQueue.push({
-                    frame: this.audioFrame.slice(),
-                    playbackActive: !!playbackActive,
-                    generation: this.generation
-                });
-                this.audioFrameCount = 0;
-            }
-        }
-        if (this.inferenceQueue.length > 12) {
-            this.inferenceQueue.splice(0, this.inferenceQueue.length - 12);
-        }
-        this.runInferenceQueue();
-    }
+    process(samples, sampleRate, onSpeechStart, onSpeechEnd, playbackActive) {
+        if (!samples || !samples.length) return;
+        var rms = this.calculateRMS(samples);
+        this.lastRms = rms;
+        var durationMs = samples.length / (sampleRate || this.sampleRate) * 1000;
+        var onset = playbackActive ? this.duckingThreshold : this.energyThreshold;
+        var sustain = playbackActive ? this.duckingEndThreshold : this.endThreshold;
+        var debounce = playbackActive ? this.bargeInStartDurationMs : this.speechStartDurationMs;
+        var voiceEnergy = rms > (this.isSpeaking ? sustain : onset);
 
-    async runInferenceQueue() {
-        if (this.inferenceRunning || !this.isReady || !this.session) return;
-        this.inferenceRunning = true;
-        try {
-            while (this.inferenceQueue.length && this.isReady) {
-                var item = this.inferenceQueue.shift();
-                if (item.generation === this.generation) {
-                    await this.inferFrame(item.frame, item.playbackActive, item.generation);
-                }
-            }
-        } catch (err) {
-            this.lastError = err;
-            console.error("Dial50: Silero inference error:", err);
-        } finally {
-            this.inferenceRunning = false;
-            if (this.inferenceQueue.length && this.isReady) this.runInferenceQueue();
-        }
-    }
-
-    async inferFrame(frame, playbackActive, generation) {
-        var ort = window.ort;
-        var inputData = new Float32Array(this.contextSize + this.frameSize);
-        inputData.set(this.context, 0);
-        inputData.set(frame, this.contextSize);
-        var inputTensor = new ort.Tensor("float32", inputData, [1, inputData.length]);
-        var stateTensor = new ort.Tensor("float32", this.state, [2, 1, 128]);
-        var sampleRateTensor = new ort.Tensor("int64", BigInt64Array.from([16000n]), []);
-        var outputs;
-        try {
-            outputs = await this.session.run({ input: inputTensor, state: stateTensor, sr: sampleRateTensor });
-            if (generation !== this.generation) return;
-            var probability = Number(outputs.output.data[0]) || 0;
-            this.state.set(outputs.stateN.data);
-            this.context.set(inputData.subarray(inputData.length - this.contextSize));
-            this.lastProbability = probability;
-            this.updateSpeechState(probability, playbackActive);
-        } finally {
-            [inputTensor, stateTensor, sampleRateTensor,
-                outputs && outputs.output, outputs && outputs.stateN].forEach(function (tensor) {
-                if (tensor && typeof tensor.dispose === "function") tensor.dispose();
-            });
-        }
-    }
-
-    updateSpeechState(probability, playbackActive) {
-        var frameDurationMs = this.frameSize / this.sampleRate * 1000;
-        var startThreshold = playbackActive ? this.bargeInThreshold : this.threshold;
-        var startDuration = playbackActive ? this.bargeInStartDurationMs : this.speechStartDurationMs;
-        if (!this.isSpeaking) {
-            if (probability >= startThreshold) {
-                this.speechTimeMs += frameDurationMs;
-                if (this.speechTimeMs >= startDuration) {
+        if (voiceEnergy) {
+            this.silenceTimeMs = 0;
+            if (!this.isSpeaking) {
+                this.speechTimeMs += durationMs;
+                if (this.speechTimeMs >= debounce) {
                     this.isSpeaking = true;
                     this.speechTimeMs = 0;
-                    this.silenceTimeMs = 0;
-                    onLocalSpeechStart(probability);
+                    if (typeof onSpeechStart === "function") onSpeechStart(rms);
                 }
-            } else {
-                this.speechTimeMs = 0;
             }
-            return;
-        }
-        if (probability >= this.negativeThreshold) {
-            this.silenceTimeMs = 0;
+        } else if (!this.isSpeaking) {
+            this.speechTimeMs = Math.max(0, this.speechTimeMs - durationMs);
         } else {
-            this.silenceTimeMs += frameDurationMs;
+            this.silenceTimeMs += durationMs;
             if (this.silenceTimeMs >= this.silenceDurationMs) {
                 this.isSpeaking = false;
-                this.speechTimeMs = 0;
                 this.silenceTimeMs = 0;
-                onLocalSpeechEnd(probability);
+                this.speechTimeMs = 0;
+                if (typeof onSpeechEnd === "function") onSpeechEnd(rms);
             }
         }
-    }
-
-    process(samples, sampleRate, playbackActive) {
-        if (!this.isReady || !samples || !samples.length) return;
-        if (sampleRate !== 24000) {
-            console.warn("Dial50 Silero VAD expects 24 kHz input before resampling; received", sampleRate);
-            return;
-        }
-        this.enqueueAudio(this.resample24kTo16k(samples), playbackActive);
     }
 
     reset() {
-        this.generation++;
-        this.state.fill(0);
-        this.context.fill(0);
-        this.audioFrame.fill(0);
-        this.audioFrameCount = 0;
-        this.inferenceQueue.length = 0;
         this.isSpeaking = false;
-        this.speechTimeMs = 0;
         this.silenceTimeMs = 0;
-        this.lastProbability = 0;
-    }
-
-    getState() {
-        return {
-            engine: "silero-neural-vad", modelReady: this.isReady,
-            isLoading: this.isLoading, isSpeaking: this.isSpeaking,
-            speechProbability: this.lastProbability, threshold: this.threshold,
-            negativeThreshold: this.negativeThreshold,
-            silenceDurationMs: this.silenceDurationMs,
-            queuedFrames: this.inferenceQueue.length,
-            error: this.lastError ? this.lastError.message : null
-        };
+        this.speechTimeMs = 0;
+        this.lastRms = 0;
     }
 }
 
-var localVad = new SileroVoiceActivityDetector({
-    threshold: typeof vadCfg.threshold === "number" ? vadCfg.threshold : 0.45,
-    negativeThreshold: typeof vadCfg.negativeThreshold === "number" ? vadCfg.negativeThreshold : 0.30,
-    bargeInThreshold: typeof vadCfg.bargeInThreshold === "number" ? vadCfg.bargeInThreshold : 0.55,
-    silenceDurationMs: typeof vadCfg.silenceDurationMs === "number" ? vadCfg.silenceDurationMs : 380,
-    speechStartDurationMs: typeof vadCfg.speechStartDurationMs === "number" ? vadCfg.speechStartDurationMs : 64,
-    bargeInStartDurationMs: typeof vadCfg.bargeInStartDurationMs === "number" ? vadCfg.bargeInStartDurationMs : 128,
-    modelPath: vadCfg.modelPath,
-    ortScriptUrl: vadCfg.ortScriptUrl,
-    wasmPaths: vadCfg.wasmPaths
+var localVad = new LocalVoiceActivityDetector({
+    sampleRate: SAMPLE_RATE,
+    threshold: typeof vadCfg.threshold === "number" ? vadCfg.threshold : 0.01,
+    speechEndThreshold: typeof vadCfg.speechEndThreshold === "number" ? vadCfg.speechEndThreshold : 0.0072,
+    duckingThreshold: typeof vadCfg.duckingThreshold === "number" ? vadCfg.duckingThreshold : 0.065,
+    silenceDurationMs: typeof vadCfg.silenceDurationMs === "number" ? vadCfg.silenceDurationMs : 600,
+    speechStartDurationMs: typeof vadCfg.speechStartDurationMs === "number" ? vadCfg.speechStartDurationMs : 180,
+    bargeInStartDurationMs: typeof vadCfg.bargeInStartDurationMs === "number" ? vadCfg.bargeInStartDurationMs : 220
 });
-var localBargeIn = vadCfg.localBargeIn !== false;
-
-// Warm the VAD up while the page is idle, so it is ready from the very first word of the first call.
-(function preloadVad() {
-    if (isEmbeddedInUnifiedHost()) return;
-    var warm = function () { localVad.load().catch(function () { /* logged inside load() */ }); };
-    if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 4000 });
-    else setTimeout(warm, 1500);
-})();
+var localBargeIn = vadCfg.localBargeIn === true;
 
 function processLocalVADFrame(buffer) {
     if (!localVad || micMuted || !buffer) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
     var samples;
     if (buffer instanceof Int16Array) samples = buffer;
     else if (buffer instanceof ArrayBuffer && buffer.byteLength >= 2) {
         samples = new Int16Array(buffer, 0, Math.floor(buffer.byteLength / 2));
     } else return;
+
     var playbackActive = !!(audioContext && activeSources.length > 0 && audioContext.currentTime < nextPlayTime);
-    localVad.process(samples, SAMPLE_RATE, playbackActive);
+    localVad.process(samples, SAMPLE_RATE, onLocalSpeechStart, onLocalSpeechEnd, playbackActive);
 }
 
-function onLocalSpeechStart(probability) {
-    if (localBargeIn) {
-        flushPlayback();
-        var layer = document.getElementById("callLayer");
-        if (layer) {
-            var status = layer.getAttribute("data-status");
-            if (status === "speaking" || status === "thinking") setCallStatus("listening");
-        }
+function onLocalSpeechStart(rms) {
+    if (localBargeIn) flushPlayback();
+    var layer = document.getElementById("callLayer");
+    if (layer) {
+        var status = layer.getAttribute("data-status");
+        if (status === "speaking" || status === "thinking") setCallStatus("listening");
     }
-    console.info("Dial50 Silero: speech started; probability=" + Number(probability).toFixed(3));
 }
 
-function onLocalSpeechEnd(probability) {
-    console.info("Dial50 Silero: speech ended; probability=" + Number(probability).toFixed(3));
+function onLocalSpeechEnd() {
     var layer = document.getElementById("callLayer");
     if (layer && layer.getAttribute("data-status") === "listening") setCallStatus("thinking");
 }
@@ -741,7 +493,7 @@ function playPCM16(buffer) {
     source.connect(speakerGainNode);
 
     var currentTime = audioContext.currentTime;
-    if (nextPlayTime < currentTime) nextPlayTime = currentTime + PLAYBACK_LEAD_SECONDS;
+    if (nextPlayTime < currentTime) nextPlayTime = currentTime;
     source.start(nextPlayTime);
     nextPlayTime += audioBuffer.duration;
 
@@ -791,6 +543,14 @@ async function startMicrophone() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
     if (audioContext.state === "suspended") await audioContext.resume();
 
+    var ctxRef = audioContext;
+    ctxRef.onstatechange = function () {
+        if (ctxRef !== audioContext || !callSessionActive) return;
+        if (ctxRef.state === "suspended" || ctxRef.state === "interrupted") {
+            ctxRef.resume().catch(function () { });
+        }
+    };
+
     speakerGainNode = audioContext.createGain();
     speakerGainNode.gain.value = speakerMuted ? 0 : 1;
     speakerGainNode.connect(audioContext.destination);
@@ -802,9 +562,7 @@ async function startMicrophone() {
             sampleRate: SAMPLE_RATE,
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: true,
-            latency: { ideal: 0.01 },
-            voiceIsolation: { ideal: true }
+            autoGainControl: true
         }
     });
 
@@ -819,7 +577,7 @@ async function startMicrophone() {
         URL.revokeObjectURL(blobUrl);
     }
 
-    var source = audioContext.createMediaStreamSource(mediaStream);
+    micSource = audioContext.createMediaStreamSource(mediaStream);
     micNode = new AudioWorkletNode(audioContext, "mic-processor", {
         numberOfInputs: 1,
         numberOfOutputs: 1,
@@ -833,12 +591,9 @@ async function startMicrophone() {
     micNode.port.postMessage({ muted: micMuted });
     micNode.port.onmessage = function (e) {
         processLocalVADFrame(e.data);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            try {
-                ws.send(e.data);
-            } catch (error) {
-                console.warn("Voice audio frame could not be sent:", error && error.message ? error.message : error);
-            }
+
+        if (ws && ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 1024 * 1024) {
+            try { ws.send(e.data); } catch (err) { }
         }
     };
 
@@ -849,7 +604,7 @@ async function startMicrophone() {
 
     micSink = audioContext.createGain();
     micSink.gain.value = 0;
-    source.connect(highPassNode);
+    micSource.connect(highPassNode);
     highPassNode.connect(micNode);
     micNode.connect(micSink);
     micSink.connect(audioContext.destination);
@@ -857,11 +612,16 @@ async function startMicrophone() {
 
 function stopMicrophone() {
     if (localVad) localVad.reset();
+    if (micSource) { micSource.disconnect(); micSource = null; }
     if (highPassNode) { highPassNode.disconnect(); highPassNode = null; }
     if (micNode) { micNode.port.onmessage = null; micNode.disconnect(); micNode = null; }
     if (micSink) { micSink.disconnect(); micSink = null; }
     if (mediaStream) { mediaStream.getTracks().forEach(function (t) { t.stop(); }); mediaStream = null; }
-    if (audioContext) { audioContext.close().catch(function () { }); audioContext = null; }
+    if (audioContext) {
+        audioContext.onstatechange = null;
+        audioContext.close().catch(function () { });
+        audioContext = null;
+    }
 }
 
 document.addEventListener("visibilitychange", function () {
@@ -873,13 +633,92 @@ document.addEventListener("visibilitychange", function () {
     });
 });
 
-// =========================================================
-// BACKEND CONNECTION
-// =========================================================
+function emitTranscript(msg, kind) {
+    try {
+        var text = typeof msg.text === "string" ? msg.text
+            : typeof msg.transcript === "string" ? msg.transcript
+                : typeof msg.delta === "string" ? msg.delta
+                    : typeof msg.content === "string" ? msg.content : "";
+        var role = String(msg.role || msg.speaker || msg.source || "").toLowerCase();
+        if (role === "agent" || role === "ai" || role === "bot" || role === "model") role = "assistant";
+
+        if (role !== "user" && role !== "assistant") role = kind === "full" ? "user" : "assistant";
+        window.dispatchEvent(new CustomEvent("voice-agent:transcript", {
+            detail: { role: role, text: text, final: kind !== "delta", kind: kind }
+        }));
+    } catch (e) { }
+}
+
+function stopHeartbeat() {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+}
+
+function startHeartbeat(socket) {
+    stopHeartbeat();
+    if (!CLIENT_HEARTBEAT_MS) return;
+    heartbeatTimer = setInterval(function () {
+        if (ws !== socket || socket.readyState !== WebSocket.OPEN) return;
+        try { socket.send(JSON.stringify({ type: "ping", timestamp: Date.now() })); } catch (e) { }
+    }, CLIENT_HEARTBEAT_MS);
+}
+
+function sendTextSafely(socket, message) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    var encoded;
+    try { encoded = JSON.stringify(message); } catch (e) { return true; }
+
+    if (encoded.length > MAX_APP_MESSAGE_CHARS) {
+        if (message && message.type === "app_context" && message.context) {
+            var slim = Object.assign({}, message.context);
+            ["items", "actions", "choices", "fields", "controls", "headings"].some(function (key) {
+                if (!Array.isArray(slim[key])) return false;
+                while (slim[key].length > 5 && JSON.stringify({ type: "app_context", context: slim }).length > MAX_APP_MESSAGE_CHARS) {
+                    slim[key] = slim[key].slice(0, Math.floor(slim[key].length * 0.7));
+                }
+                return JSON.stringify({ type: "app_context", context: slim }).length <= MAX_APP_MESSAGE_CHARS;
+            });
+            encoded = JSON.stringify({ type: "app_context", context: slim });
+        }
+        if (encoded.length > MAX_APP_MESSAGE_CHARS) {
+            console.warn("Voice message dropped: still " + encoded.length + " chars after trimming.");
+            return true;
+        }
+    }
+
+    if (socket.bufferedAmount > MAX_WS_BUFFERED_BYTES) {
+        if (message && message.type === "app_context") return true;
+        return false;
+    }
+
+    try {
+        socket.send(encoded);
+        return true;
+    } catch (error) {
+        if (socket.readyState !== WebSocket.OPEN) return false;
+        console.error("Could not send voice-agent message:", error);
+        return true;
+    }
+}
+
+function flushPendingVoiceMessages(socket) {
+    clearTimeout(queueFlushTimer);
+    queueFlushTimer = null;
+    while (pendingVoiceMessages.length && ws === socket && socket.readyState === WebSocket.OPEN) {
+        if (!sendTextSafely(socket, pendingVoiceMessages[0])) break;
+        pendingVoiceMessages.shift();
+    }
+    if (pendingVoiceMessages.length && ws === socket && socket.readyState === WebSocket.OPEN) {
+        queueFlushTimer = setTimeout(function () { flushPendingVoiceMessages(socket); }, 250);
+    }
+}
+
 async function connectToAvatarBackend() {
     if (!body) body = document.body;
     if (!body || !["connecting", "connected"].includes(body.getAttribute("data-state"))
-        || connectionInProgress || ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+        || connectionInProgress || (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN))) {
+        return;
+    }
 
     if (!callSessionActive) {
         if (callOwnerPending) return;
@@ -896,106 +735,69 @@ async function connectToAvatarBackend() {
             releaseCallOwnership();
             return;
         }
-    }
-    if (!callSessionActive) {
+
         callSessionActive = true;
         callSessionGeneration += 1;
         reconnectAttempts = 0;
-        elapsedSeconds = 0;
-        tokenRequestAttemptedForSession = false;
-        try { sessionStorage.setItem("dial50_voice_call_active", "1"); } catch (e) { /* ignore */ }
+        shortCloseStreak = 0;
+        timeLeft = SESSION_SECONDS;
+        userEndedCall = false;
+        serverEnding = false;
+
+        if (window.UnifiedAIBridge && typeof window.UnifiedAIBridge.connect === "function") {
+            window.UnifiedAIBridge.connect();
+        }
     }
-    var tokenRequestAttempted = false;
+
     var sessionGeneration = callSessionGeneration;
     var sessionIsCurrent = function () {
         return callSessionActive && sessionGeneration === callSessionGeneration
             && body && ["connecting", "connected"].includes(body.getAttribute("data-state"));
     };
+
     connectionInProgress = true;
+    serverEnding = false;
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
 
     try {
         await languageReady;
         if (!sessionIsCurrent()) return;
-        // The neural VAD only drives local barge-in. Load it in the BACKGROUND: a slow or blocked
-        // CDN must never delay the call or send it into a reconnect loop before the socket exists.
-        localVad.load().catch(function () { /* logged inside load() */ });
         await startMicrophone();
         if (!sessionIsCurrent()) return;
-        setCallStatus(reconnectAttempts ? "reconnecting" : "ringing");
+        setCallStatus(reconnectAttempts > 0 ? "reconnecting" : "ringing");
 
-        var token = callAccessToken;
-        if (token && reconnectAttempts > 0
-            && (forceTokenRefresh || failedOpenStreak >= 1 || tokenExpiresInMs(token) < 60000)
-            && Date.now() - lastTokenFetchAt > 5000) {
-            lastTokenFetchAt = Date.now();
-            try {
-                var freshToken = await fetchToken();
-                if (freshToken) {
-                    token = freshToken;
-                    callAccessToken = freshToken;
-                    forceTokenRefresh = false;
-                    failedOpenStreak = 0;
-                    console.info("Voice call: reconnecting with a fresh access token.");
-                }
-            } catch (refreshError) {
-                console.warn("Voice call: token refresh failed, trying the previous token.",
-                    refreshError && refreshError.message ? refreshError.message : refreshError);
-            }
-            if (!sessionIsCurrent()) return;
-        }
-        if (!token) {
-            if (tokenRequestAttemptedForSession) {
-                connectionInProgress = false;
-                setCallStatus("token-unavailable");
-                return;
-            }
-            tokenRequestAttempted = true;
-            tokenRequestAttemptedForSession = true;
-            token = await fetchToken();
-        }
+        var token = await fetchToken();
         if (!sessionIsCurrent()) return;
         if (!token) throw new Error("No token — cannot open /voice-assistant.");
-        callAccessToken = token;
-        saveResumableCall(token);
-        var tokenTtlMs = tokenExpiresInMs(token);
-        console.info("Voice call token lifetime:", isFinite(tokenTtlMs) ? Math.round(tokenTtlMs / 1000) + " s" : "no expiry in token");
 
         var wsUrl = BACKEND_WS + "/voice-assistant?token=" + encodeURIComponent(token);
-        // Same opt-in as the token payload: the voice backend closes the socket ~1s after open
-        // when it sees session_id/device_id it does not understand, so only send them when
-        // config.js sets SEND_SESSION_ID: true.
-        var bridgeSession = CFG.SEND_SESSION_ID && window.UnifiedAIBridge;
+
+        var bridgeSession = CFG.SEND_SESSION_IN_WS === true && window.UnifiedAIBridge;
         if (bridgeSession && bridgeSession.sessionId) {
             wsUrl += "&session_id=" + encodeURIComponent(bridgeSession.sessionId)
                 + "&device_id=" + encodeURIComponent(bridgeSession.deviceId || "");
         }
+
         var socket = new WebSocket(wsUrl);
         socket.binaryType = "arraybuffer";
         ws = socket;
         var openedAt = 0;
+
+        clearTimeout(connectionTimeoutTimer);
         connectionTimeoutTimer = setTimeout(function () {
             if (ws === socket && socket.readyState === WebSocket.CONNECTING) {
                 socket.close(4000, "Connection timed out");
             }
-        }, 45000);   // a scaled-to-zero backend can need 20-40 s to accept the first connection
+        }, 45000);
 
         socket.onopen = function () {
             if (ws !== socket) return;
             openedAt = Date.now();
-            window.__voiceOpenedAt = openedAt;
-            failedOpenStreak = 0;
             clearTimeout(connectionTimeoutTimer);
             connectionTimeoutTimer = null;
-            // No client-initiated ping: the voice backend closes the socket when it
-            // receives a {"type":"ping"} it did not ask for (~16 s after open, right
-            // after the first 15 s heartbeat). The server pings us and we pong back;
-            // that is the whole keepalive contract.
-            clearInterval(voiceHeartbeatTimer);
-            voiceHeartbeatTimer = null;
-            lastVoicePongAt = null;
             connectionInProgress = false;
+
             clearTimeout(stableResetTimer);
             stableResetTimer = setTimeout(function () {
                 if (ws === socket && socket.readyState === WebSocket.OPEN) {
@@ -1003,18 +805,15 @@ async function connectToAvatarBackend() {
                     shortCloseStreak = 0;
                 }
             }, 10000);
+
             goConnected();
+            startHeartbeat(socket);
             window.dispatchEvent(new CustomEvent("voice-agent:connection-state", {
-                detail: { connected: true, reconnecting: reconnectAttempts > 0 }
+                detail: { connected: true, reconnecting: false }
             }));
-            while (pendingVoiceMessages.length && ws === socket && socket.readyState === WebSocket.OPEN) {
-                try {
-                    socket.send(JSON.stringify(pendingVoiceMessages.shift()));
-                } catch (error) {
-                    if (socket.readyState !== WebSocket.OPEN) break;
-                    console.error("Could not send queued voice-agent message:", error);
-                }
-            }
+
+            clearTimeout(queueFlushTimer);
+            queueFlushTimer = setTimeout(function () { flushPendingVoiceMessages(socket); }, APP_MESSAGE_DELAY_MS);
         };
 
         socket.onmessage = function (event) {
@@ -1028,6 +827,7 @@ async function connectToAvatarBackend() {
 
             var msg;
             try { msg = JSON.parse(event.data); } catch (e) { return; }
+            if (!msg || typeof msg !== "object") return;
 
             switch (msg.type) {
                 case "interrupt":
@@ -1046,6 +846,7 @@ async function connectToAvatarBackend() {
                     break;
 
                 case "transcript":
+                    emitTranscript(msg, "full");
                     var cl = document.getElementById("callLayer");
                     if (cl && cl.getAttribute("data-status") !== "speaking") {
                         setCallStatus("thinking");
@@ -1063,38 +864,40 @@ async function connectToAvatarBackend() {
                     }));
                     break;
 
-                case "transcript_delta":
-                case "transcript_done":
-                case "session.created":
-                case "session.updated":
-                case "response.audio_transcript.delta":
-                case "response.audio_transcript.done":
-                    break;
-
                 case "ping":
-                    if (socket.readyState === WebSocket.OPEN) {
+                    if (CFG.REPLY_TO_PING === true && socket.readyState === WebSocket.OPEN) {
                         try {
-                            socket.send(JSON.stringify(Object.assign({}, msg, { type: "pong" })));
-                        } catch (error) {
-                            console.warn("Could not reply to voice WebSocket ping:", error && error.message ? error.message : error);
-                        }
+                            var pongMessage = { type: "pong" };
+                            if (msg.id !== undefined) pongMessage.id = msg.id;
+                            if (msg.timestamp !== undefined) pongMessage.timestamp = msg.timestamp;
+                            socket.send(JSON.stringify(pongMessage));
+                        } catch (error) { }
                     }
                     break;
 
+                case "transcript_delta":
+                case "response.audio_transcript.delta":
+                    emitTranscript(msg, "delta");
+                    break;
+
+                case "transcript_done":
+                case "response.audio_transcript.done":
+                    emitTranscript(msg, "done");
+                    break;
+
                 case "pong":
-                    lastVoicePongAt = Date.now();
+                case "session.created":
+                case "session.updated":
                     break;
 
                 case "call_ended": {
-                    clearTimeout(serverEndTimer);
+                    serverEnding = true;
                     var remainingMs = audioContext
                         ? Math.max(0, (nextPlayTime - audioContext.currentTime) * 1000)
                         : 0;
+                    clearTimeout(serverEndTimer);
                     serverEndTimer = setTimeout(function () {
-                        serverEndTimer = null;
-                        if (ws === socket && socket.readyState === WebSocket.OPEN) {
-                            setCallStatus("listening");
-                        }
+                        endChat("ended");
                     }, remainingMs + 300);
                     break;
                 }
@@ -1106,115 +909,103 @@ async function connectToAvatarBackend() {
 
         socket.onclose = function (event) {
             if (ws !== socket) return;
+
+            var aliveMs = openedAt ? Date.now() - openedAt : 0;
+            console.warn("Voice socket closed — code " + event.code
+                + (event.reason ? ", reason: " + event.reason : "")
+                + ", clean: " + event.wasClean + ", alive " + Math.round(aliveMs / 1000) + " s");
+
             clearTimeout(stableResetTimer);
             clearTimeout(connectionTimeoutTimer);
-            clearInterval(voiceHeartbeatTimer);
-            clearTimeout(serverEndTimer);
+            clearTimeout(statusTransitionTimer);
+            clearTimeout(queueFlushTimer);
+            stopHeartbeat();
+            stableResetTimer = null;
             connectionTimeoutTimer = null;
-            voiceHeartbeatTimer = null;
-            serverEndTimer = null;
+            statusTransitionTimer = null;
+            queueFlushTimer = null;
             connectionInProgress = false;
             ws = null;
-            var aliveMs = openedAt ? Date.now() - openedAt : 0;
-            window.__voiceOpenedAt = 0;
-            if (!openedAt) failedOpenStreak += 1;                       // never reached an open socket
-            if (event.code === 1000 && openedAt && aliveMs < 5000) shortCloseStreak += 1;
-            else shortCloseStreak = 0;
-            if (AUTH_CLOSE_CODES.indexOf(event.code) !== -1) forceTokenRefresh = true;
-            console.warn("Voice WebSocket closed:", event.code, event.reason || "No close reason",
-                "wasClean:", event.wasClean, "| openForMs:", aliveMs,
-                "| tokenLeftMs:", callAccessToken ? Math.round(tokenExpiresInMs(callAccessToken)) : "n/a",
-                "| attempts:", reconnectAttempts,
-                "| last pong age ms:", lastVoicePongAt === null ? "none" : Date.now() - lastVoicePongAt);
-            // paste JSON.stringify(window.__voiceDiag) in the console to share the last drops
-            window.__voiceDiag = (window.__voiceDiag || []).slice(-19).concat([{
-                at: new Date().toISOString(), code: event.code, reason: event.reason || "",
-                wasClean: event.wasClean, openForMs: aliveMs, openedFirst: !!openedAt,
-                tokenLeftMs: callAccessToken ? Math.round(tokenExpiresInMs(callAccessToken)) : null,
-                attempts: reconnectAttempts,
-                lastPongAgeMs: lastVoicePongAt === null ? null : Date.now() - lastVoicePongAt
-            }]);
-            scheduleVoiceReconnect("WebSocket close " + event.code);
+
+            if (serverEnding || userEndedCall || !callSessionActive) return;
+
+            flushPlayback();
+            if (!openedAt || aliveMs < 5000) {
+                shortCloseStreak += 1;
+            } else {
+                shortCloseStreak = 0;
+            }
+
+            if (shortCloseStreak >= MAX_SHORT_CLOSES) {
+                var reasonStatus = AUTH_CLOSE_CODES.indexOf(event.code) !== -1
+                    ? "token-unavailable"
+                    : (!openedAt ? "connection-failed" : "disconnected");
+                endChat(reasonStatus);
+                return;
+            }
+
+            scheduleVoiceReconnect("socket-closed-" + event.code);
         };
 
         socket.onerror = function () {
             if (ws !== socket) return;
-            setCallStatus("reconnecting");
             try {
                 if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
                     socket.close(4000, "Connection error");
                 }
-            } catch (error) {
-                console.warn("Could not close the failed voice WebSocket:", error && error.message ? error.message : error);
-            }
+            } catch (e) { }
         };
     } catch (err) {
         if (!sessionIsCurrent()) return;
         connectionInProgress = false;
-        console.error("Could not connect the voice call:", err);
+        console.error("Could not start call:", err);
         if (err && (err.name === "NotAllowedError" || err.name === "SecurityError")) {
-            setCallStatus("microphone-required");
+            endChat("microphone-required");
             return;
         }
-        if (tokenRequestAttempted && !callAccessToken) {
-            setCallStatus(err && err.status === 429 ? "service-busy" : "token-unavailable");
+        if (reconnectAttempts > 0 && reconnectAttempts < 5) {
+            scheduleVoiceReconnect(err && err.message ? err.message : "connect-error");
             return;
         }
-        if (!callAccessToken) {
-            setCallStatus("connection-failed");
-            return;
-        }
-        scheduleVoiceReconnect("connection setup failure");
+        endChat("connection-failed");
     }
 }
 
 function scheduleVoiceReconnect(reason) {
-    if (!callSessionActive || !body) return;
-    if (!["connecting", "connected"].includes(body.getAttribute("data-state"))) {
-        setState("connecting");
-    }
-    if (!callAccessToken) {
-        setCallStatus(tokenRequestAttemptedForSession ? "token-unavailable" : "connection-failed");
-        return;
-    }
-    if (shortCloseStreak >= MAX_SHORT_CLOSES) {
-        // The voice service keeps closing the socket right after open. The call must stay
-        // alive until the user presses End, so keep retrying slowly instead of giving up.
-        console.warn("Voice call: the voice service closed the socket immediately "
-            + shortCloseStreak + " times in a row; still retrying every 15 s.");
-        setCallStatus("reconnecting");
-        window.dispatchEvent(new CustomEvent("voice-agent:connection-state", {
-            detail: { connected: false, reconnecting: true, attempt: reconnectAttempts, retryInMs: 15000 }
-        }));
-        reconnectTimer = setTimeout(function () {
-            if (callSessionActive) connectToAvatarBackend();
-        }, 15000);
-        return;
-    }
+    if (!callSessionActive || userEndedCall || serverEnding) return;
+    if (reconnectTimer) return;
 
     reconnectAttempts += 1;
-    // 250 ms, 1 s, 2 s, 4 s, 8 s, then every 10 s: the first retry is nearly instant
-    var delay = reconnectAttempts === 1 ? 250 : Math.min(10000, 1000 * Math.pow(2, Math.min(reconnectAttempts - 2, 4)));
+
+    var delayMs = reconnectAttempts === 1 ? 300 : Math.min(10000, 1000 * reconnectAttempts);
+
+    console.warn("Scheduling voice reconnect #" + reconnectAttempts + " in " + delayMs + " ms:", reason || "");
+
+    var currentState = body ? body.getAttribute("data-state") : null;
+    if (currentState !== "connected" && currentState !== "connecting") setState("connecting");
     setCallStatus("reconnecting");
-    console.warn("Voice call reconnect scheduled after " + (reason || "connection loss")
-        + " in " + delay + "ms; reusing the existing access token.");
     window.dispatchEvent(new CustomEvent("voice-agent:connection-state", {
-        detail: { connected: false, reconnecting: true, attempt: reconnectAttempts, retryInMs: delay }
+        detail: { connected: false, reconnecting: true }
     }));
+
+    var sessionGen = callSessionGeneration;
     reconnectTimer = setTimeout(function () {
-        if (callSessionActive) connectToAvatarBackend();
-    }, delay);
+        reconnectTimer = null;
+        if (!callSessionActive || userEndedCall || serverEnding || sessionGen !== callSessionGeneration) return;
+        connectToAvatarBackend();
+    }, delayMs);
 }
 
 function goConnected() {
     if (!countdownTimer) {
+        timeLeft = SESSION_SECONDS;
         renderTimer();
         startCountdown();
     }
     setState("connected");
     setCallStatus("connecting");
     clearTimeout(statusTransitionTimer);
-    setTimeout(function () {
+    statusTransitionTimer = setTimeout(function () {
         if (!ws || ws.readyState !== WebSocket.OPEN) return;
         setCallStatus("connected");
         statusTransitionTimer = setTimeout(function () {
@@ -1226,8 +1017,9 @@ function goConnected() {
 function startCountdown() {
     clearInterval(countdownTimer);
     countdownTimer = setInterval(function () {
-        elapsedSeconds += 1;
+        timeLeft -= 1;
         renderTimer();
+        if (timeLeft <= 0) endChat("ended");
     }, 1000);
 }
 
@@ -1244,6 +1036,7 @@ function setCallStatus(status) {
         ringing: "Connecting...",
         connecting: "Connecting...",
         reconnecting: "Reconnecting...",
+        "connection-lost": "Connection lost. Reconnecting...",
         "service-busy": "Voice service busy. Please try again later.",
         "token-unavailable": "Could not start the voice call. Please try again.",
         "connection-failed": "Voice connection failed. Please try again.",
@@ -1267,33 +1060,38 @@ function setCallStatus(status) {
 }
 
 function endChat(finalStatus) {
-    clearTimeout(stableResetTimer);
-    clearResumableCall();
-    releaseCallOwnership();
+    userEndedCall = true;
+    serverEnding = false;
     callSessionActive = false;
-    try { sessionStorage.removeItem("dial50_voice_call_active"); } catch (e) { /* ignore */ }
-    try { sessionStorage.removeItem("dial50_voice_call_active"); } catch (e) { /* ignore */ }
-    callAccessToken = null;
-    tokenRequestAttemptedForSession = false;
     callSessionGeneration += 1;
     connectionInProgress = false;
+
+    if (window.UnifiedAIBridge && typeof window.UnifiedAIBridge.disconnect === "function") {
+        window.UnifiedAIBridge.disconnect();
+    }
+
+    reconnectAttempts = 0;
+    shortCloseStreak = 0;
+    pendingVoiceMessages = [];
+
+    releaseCallOwnership();
+    stopHeartbeat();
+
     clearInterval(countdownTimer);
     countdownTimer = null;
-    clearInterval(voiceHeartbeatTimer);
-    voiceHeartbeatTimer = null;
     clearTimeout(drainTimer);
     clearTimeout(reconnectTimer);
     clearTimeout(connectionTimeoutTimer);
     clearTimeout(statusTransitionTimer);
+    clearTimeout(stableResetTimer);
     clearTimeout(serverEndTimer);
+    clearTimeout(queueFlushTimer);
     reconnectTimer = null;
     connectionTimeoutTimer = null;
     statusTransitionTimer = null;
+    stableResetTimer = null;
     serverEndTimer = null;
-    reconnectAttempts = 0;
-    shortCloseStreak = 0;
-    elapsedSeconds = 0;
-    pendingVoiceMessages = [];
+    queueFlushTimer = null;
 
     micMuted = false;
     speakerMuted = false;
@@ -1307,6 +1105,11 @@ function endChat(finalStatus) {
     if (ws) {
         var old = ws;
         ws = null;
+        try {
+            if (CFG.SEND_END_CALL === true && old.readyState === WebSocket.OPEN) {
+                old.send(JSON.stringify({ type: "end_call" }));
+            }
+        } catch (e) { }
         try { old.close(); } catch (e) { }
     }
 
@@ -1321,12 +1124,7 @@ function endChat(finalStatus) {
     }
 }
 
-// =========================================================
-// EVENTS
-// =========================================================
-
 function initializeAvatarEvents() {
-
     initializeAvatarElements();
 
     if (!body) {
@@ -1337,14 +1135,15 @@ function initializeAvatarEvents() {
     if (endChatBtn) {
         endChatBtn.addEventListener("click", function () {
             console.log("Dial50: End Chat clicked");
-            endChat();
+            endChat("ended");
         });
     }
 
     if (homeBtn) {
         homeBtn.addEventListener("click", function () {
             console.log("Dial50: Home clicked");
-            if (callSessionActive) {
+            var state = body.getAttribute("data-state");
+            if (callSessionActive || state === "connecting" || state === "connected") {
                 if (window.UnifiedAIHost && typeof window.UnifiedAIHost.minimizeCall === "function") {
                     window.UnifiedAIHost.minimizeCall();
                 } else {
@@ -1358,17 +1157,11 @@ function initializeAvatarEvents() {
 
     if (micBtn) {
         micBtn.addEventListener("click", function () {
-
             console.log("Dial50: Mic clicked");
-
             micMuted = !micMuted;
-
             micBtn.classList.toggle("muted", micMuted);
-
             if (micNode) {
-                micNode.port.postMessage({
-                    muted: micMuted
-                });
+                micNode.port.postMessage({ muted: micMuted });
             }
         });
     }
@@ -1382,12 +1175,14 @@ function initializeAvatarEvents() {
 
     if (assistantBackBtn) {
         assistantBackBtn.addEventListener("click", function () {
-            if (body.getAttribute("data-state") === "connecting"
-                || body.getAttribute("data-state") === "connected") {
+            console.log("Dial50: Assistant Back clicked");
+            var state = body.getAttribute("data-state");
+            if (callSessionActive || state === "connecting" || state === "connected") {
                 if (window.UnifiedAIHost && typeof window.UnifiedAIHost.minimizeCall === "function") {
                     window.UnifiedAIHost.minimizeCall();
                 } else {
-                    console.warn("Unified AI in-page assistant bar is unavailable; the active call will continue.");
+                    endChat("ended");
+                    setState("idle");
                 }
                 return;
             }
@@ -1397,17 +1192,10 @@ function initializeAvatarEvents() {
 
     if (idleBtn) {
         idleBtn.addEventListener("click", function () {
-
             console.log("Dial50: Start Call clicked");
-
             var state = body.getAttribute("data-state");
 
             if (state === "connecting" || state === "connected") {
-                if (state === "connecting" && callSessionActive && !connectionInProgress
-                    && !reconnectTimer && !ws && !tokenRequestAttemptedForSession) {
-                    connectToAvatarBackend();
-                    return;
-                }
                 if (window.UnifiedAIHost && typeof window.UnifiedAIHost.showChat === "function") {
                     window.UnifiedAIHost.showChat();
                 }
@@ -1415,134 +1203,26 @@ function initializeAvatarEvents() {
             }
 
             callSessionActive = false;
-            callAccessToken = null;
             reconnectAttempts = 0;
+            shortCloseStreak = 0;
             if (window.UnifiedAIHost && typeof window.UnifiedAIHost.showChat === "function") {
                 window.UnifiedAIHost.showChat();
             }
             setState("connecting");
             setCallStatus("dialing");
-
             connectToAvatarBackend();
         });
     }
 
     if (endedMicBtn) {
         endedMicBtn.addEventListener("click", function () {
-
             console.log("Dial50: Ended Mic / Start Again clicked");
-
             if (idleBtn) {
                 idleBtn.click();
             }
         });
     }
-
-   console.log("Dial50: All avatar events initialized", {
-       idleBtn: !!idleBtn,
-       micBtn: !!micBtn,
-       speakerBtn: !!speakerBtn,
-       endChatBtn: !!endChatBtn,
-       endedMicBtn: !!endedMicBtn,
-       body: !!body
-   });
 }
-
-
-// =========================================================
-// LIVE DIAGNOSTICS: open the Home URL with  &VoiceDebug=1  to see the real connection state on screen.
-// A screenshot of this box tells us exactly why the call drops. Add  &VoiceDebug=0  to turn it off.
-// =========================================================
-(function voiceDebugOverlay() {
-    if (isEmbeddedInUnifiedHost()) return;
-    var enabled = false;
-    try {
-        if (/[?&]VoiceDebug=0\b/i.test(window.location.search)) sessionStorage.removeItem("voiceDebug");
-        else if (/[?&]VoiceDebug=1\b/i.test(window.location.search)) sessionStorage.setItem("voiceDebug", "1");
-        enabled = sessionStorage.getItem("voiceDebug") === "1";
-    } catch (e) { /* ignore */ }
-    if (!enabled) return;
-
-    function start() {
-        var box = document.createElement("pre");
-        box.style.cssText = "position:fixed;top:6px;left:6px;z-index:2147483647;margin:0;padding:6px 8px;max-width:340px;" +
-            "background:rgba(0,0,0,.78);color:#8dffa8;font:11px/1.35 ui-monospace,Consolas,monospace;border-radius:8px;" +
-            "pointer-events:none;white-space:pre-wrap";
-        document.body.appendChild(box);
-        var names = ["CONNECTING", "OPEN", "CLOSING", "CLOSED"];
-        setInterval(function () {
-            var last = (window.__voiceDiag || []).slice(-1)[0];
-            var layer = document.getElementById("callLayer");
-            var left = callAccessToken ? tokenExpiresInMs(callAccessToken) : null;
-            var vad = localVad && localVad.getState ? localVad.getState() : {};
-            box.textContent =
-                "VOICE DEBUG\n" +
-                "state: " + (document.body.getAttribute("data-state") || "-") + " / " + (layer ? layer.getAttribute("data-status") : "-") + "\n" +
-                "socket: " + (ws ? names[ws.readyState] : "none") +
-                (window.__voiceOpenedAt ? " (up " + Math.round((Date.now() - window.__voiceOpenedAt) / 1000) + "s)" : "") + "\n" +
-                "reconnect attempts: " + reconnectAttempts + "\n" +
-                "token left: " + (left === null ? "n/a" : isFinite(left) ? Math.round(left / 1000) + "s" : "no expiry") + "\n" +
-                "network: " + (navigator.onLine ? "online" : "OFFLINE") + "\n" +
-                "vad: " + (vad.modelReady ? "ready" : vad.isLoading ? "loading" : (vad.error ? "error" : "idle")) + "\n" +
-                (last ? "last close: " + last.code + " \"" + last.reason + "\" after " + last.openForMs + "ms" +
-                    (last.openedFirst ? "" : " (never opened)") : "last close: none");
-        }, 500);
-    }
-    if (document.body) start(); else window.addEventListener("DOMContentLoaded", start);
-})();
-
-// A returning network connection should reconnect at once, not after the next backoff step.
-window.addEventListener("online", function () {
-    if (!callSessionActive || connectionInProgress) return;
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-    connectToAvatarBackend();
-});
-
-// =========================================================
-// SAME CALL, SAME TOKEN, UNTIL "END CALL"
-// While a call is live its token is kept for this tab. A page refresh resumes the call with that
-// same token. Only the End Call button clears it. A heartbeat keeps the entry fresh so an old,
-// abandoned entry (closed tab, logout) never auto-starts a call later.
-// =========================================================
-var RESUME_KEY = "dial50_voice_call";
-var RESUME_MAX_AGE_MS = 90000;
-var resumeHeartbeat = null;
-
-function saveResumableCall(token) {
-    try { sessionStorage.setItem(RESUME_KEY, JSON.stringify({ token: token, at: Date.now() })); } catch (e) { /* ignore */ }
-    if (!resumeHeartbeat) {
-        resumeHeartbeat = setInterval(function () {
-            if (callSessionActive && callAccessToken) saveResumableCall(callAccessToken);
-        }, 15000);
-    }
-}
-
-function clearResumableCall() {
-    clearInterval(resumeHeartbeat);
-    resumeHeartbeat = null;
-    try { sessionStorage.removeItem(RESUME_KEY); } catch (e) { /* ignore */ }
-}
-
-(function resumeCallAfterRefresh() {
-    if (isEmbeddedInUnifiedHost()) return;
-    var saved = null;
-    try { saved = JSON.parse(sessionStorage.getItem(RESUME_KEY) || "null"); } catch (e) { /* ignore */ }
-    if (!saved || !saved.token || Date.now() - (saved.at || 0) > RESUME_MAX_AGE_MS) return;
-    if (!/\/home(?:\/index)?\/?$/i.test(window.location.pathname)) return;   // only the Home shell owns the call
-    window.addEventListener("load", function () {
-        setTimeout(function () {
-            var current = document.body && document.body.getAttribute("data-state");
-            if (current && current !== "idle") return;
-            // an expired token is useless: let the normal flow request a new one
-            callAccessToken = tokenExpiresInMs(saved.token) > 60000 ? saved.token : null;
-            setState("connecting");
-            setCallStatus("dialing");
-            connectToAvatarBackend();
-        }, 900);
-    });
-})();
 
 if (isEmbeddedInUnifiedHost()) {
     console.warn("Voice client not started inside the Unified AI frame; the Home page owns the call.");
@@ -1551,57 +1231,16 @@ if (isEmbeddedInUnifiedHost()) {
         initializeAvatarUI();
         initializeAvatarEvents();
     });
-
 } else {
-
     initializeAvatarUI();
     initializeAvatarEvents();
-
 }
 
 window.setState = setState;
 window.setCallStatus = setCallStatus;
 window.connectToAvatarBackend = connectToAvatarBackend;
 window.endChat = endChat;
-window.sendVoiceAgentMessage = function (message) {
-    // The voice backend only understands audio frames, ping/pong and its own protocol.
-    // Unified-AI app_context / app_action_result messages are opt-in (config.js:
-    // SEND_APP_MESSAGES: true) — a backend that does not know these types closes the
-    // socket ~1s after open. Page context and action results already reach the AI
-    // through /api/ai-bridge, so nothing is lost while this stays off.
-    if (!CFG.SEND_APP_MESSAGES && message
-        && (message.type === "app_context" || message.type === "app_action_result")) {
-        return false;
-    }
-    var socket = ws;
-    if (!socket) {
-        if (!callSessionActive) return false;
-        return queueVoiceAgentMessage(message);
-    }
-
-    if (socket.readyState === WebSocket.CONNECTING) {
-        if (message && message.type === "app_context") {
-            pendingVoiceMessages = pendingVoiceMessages.filter(function (pending) {
-                return pending.type !== "app_context";
-            });
-        }
-        return queueVoiceAgentMessage(message);
-    }
-    if (socket.readyState !== WebSocket.OPEN) {
-        if (!callSessionActive) return false;
-        return queueVoiceAgentMessage(message);
-    }
-
-    try {
-        socket.send(JSON.stringify(message));
-        return true;
-    } catch (error) {
-        if (socket.readyState === WebSocket.OPEN) {
-            console.error("Voice-agent action result could not be sent:", error);
-        }
-        return false;
-    }
-};
+window.getWidgetUserId = getWidgetUserId;
 
 function queueVoiceAgentMessage(message) {
     if (!message || typeof message !== "object" || !callSessionActive) return false;
@@ -1617,11 +1256,42 @@ function queueVoiceAgentMessage(message) {
     pendingVoiceMessages.push(message);
     return true;
 }
+
+window.sendVoiceAgentMessage = function (message) {
+    if (!CFG.SEND_APP_MESSAGES && message
+        && (message.type === "app_context" || message.type === "app_action_result")) {
+        return false;
+    }
+    var socket = ws;
+    if (!socket) {
+        if (!callSessionActive) return false;
+        return queueVoiceAgentMessage(message);
+    }
+
+    if (socket.readyState === WebSocket.CONNECTING) {
+        return queueVoiceAgentMessage(message);
+    }
+    if (socket.readyState !== WebSocket.OPEN) {
+        if (!callSessionActive) return false;
+        return queueVoiceAgentMessage(message);
+    }
+
+    if (queueFlushTimer || pendingVoiceMessages.length) {
+        var queued = queueVoiceAgentMessage(message);
+        if (queued && !queueFlushTimer) {
+            queueFlushTimer = setTimeout(function () { flushPendingVoiceMessages(socket); }, 50);
+        }
+        return queued;
+    }
+
+    if (sendTextSafely(socket, message)) return true;
+    return queueVoiceAgentMessage(message);
+};
+
 window.Dial50VAD = {
-    Detector: SileroVoiceActivityDetector,
+    Detector: LocalVoiceActivityDetector,
     instance: localVad,
-    load: function () { return localVad.load(); },
     processFrame: processLocalVADFrame,
     reset: function () { localVad.reset(); },
-    getState: function () { return localVad.getState(); }
+    getState: function () { return { isSpeaking: localVad.isSpeaking, lastRms: localVad.lastRms, threshold: localVad.energyThreshold }; }
 };

@@ -1,56 +1,116 @@
 ﻿@model BedInfo
+@inject Microsoft.AspNetCore.Hosting.IWebHostEnvironment WebHostEnv
 @{
     ViewData["Title"] = ":: Educational Materials ::";
+    var videosDir = System.IO.Path.Combine(WebHostEnv.WebRootPath ?? "", "Mydailycarevideos");
+    var allowedExts = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp4", ".webm", ".ogg", ".mov", ".m4v"
+    };
+    var localVideos = new System.Collections.Generic.List<object>();
+    if (System.IO.Directory.Exists(videosDir))
+    {
+        var files = System.IO.Directory.GetFiles(videosDir, "*.*", System.IO.SearchOption.AllDirectories);
+        System.Array.Sort(files, System.StringComparer.OrdinalIgnoreCase);
+        foreach (var filePath in files)
+        {
+            var ext = System.IO.Path.GetExtension(filePath);
+            if (!allowedExts.Contains(ext)) continue;
+            var fileName = System.IO.Path.GetFileName(filePath);
+            var relPath = System.IO.Path.GetRelativePath(videosDir, filePath).Replace("\\", "/");
+            var segments = relPath.Split('/');
+            var category = segments.Length > 1
+                ? segments[0].Replace("-", " ").Replace("_", " ").Trim()
+                : "";
+            for (int s = 0; s < segments.Length; s++)
+            {
+                segments[s] = System.Uri.EscapeDataString(segments[s]);
+            }
+            var title = System.IO.Path.GetFileNameWithoutExtension(filePath)
+                .Replace("-", " ")
+                .Replace("_", " ")
+                .Trim();
+            localVideos.Add(new
+            {
+                type = "VIDEO",
+                title = title,
+                category = category,
+                fileName = fileName,
+                url = "/Mydailycarevideos/" + string.Join("/", segments)
+            });
+        }
+    }
 }
-<link href="~/css/MyLibrary.css" rel="stylesheet" />
 <link rel="stylesheet" href="~/css/DailyCare.css">
-<style>
-    .icon-box {
-        width: 50px;
-        height: 50px;
-    }
+<link href="~/css/MyLibrary.css" rel="stylesheet" asp-append-version="true" />
 
-    .card {
-        padding: 16px;
-    }
-</style>
 <div class="app-wrapper">
     <partial name="_header"></partial>
     <div class="mobile-header">
-        <button class="back-btn" onclick="goBackMDC()">←</button>
+        <button type="button" class="back-btn" onclick="goBackMDC()">←</button>
         <div class="title">Educational Materials</div>
     </div>
     <div class="subtitle">
         Learn more about your condition and recovery process.
     </div>
 
-    <div id="materials-container" class="content" style="display: flow;"></div>
+    <div class="library-toolbar" id="libraryToolbar" hidden>
+        <input type="search" id="librarySearchInput" class="library-search" placeholder="Search videos..." aria-label="Search videos" autocomplete="off" />
+        <div id="libraryCategoryBar" class="library-category-bar" hidden></div>
+    </div>
+
+    <div id="materials-container" class="content"></div>
 
     <partial name="_footer"></partial>
-    <script>
 
+    <div class="video-overlay" id="videoOverlay">
+        <div class="video-modal">
+            <div class="video-modal-body" id="videoModalBody"></div>
+            <button type="button" class="video-overlay-back" onclick="goBackFromVideo()" aria-label="Back">← Back</button>
+        </div>
+    </div>
+
+    <script>
+        window.LOCAL_LIBRARY_VIDEOS = @Json.Serialize(localVideos);
 
         document.addEventListener("DOMContentLoaded", function () {
+            var hospitalName = '@Model?.PatientName';
+            var bedNumber = '@Model?.BedNumber';
 
-
-        var hospitalName = '@Model?.PatientName';
-        var bedNumber = '@Model?.BedNumber';
-
-
-        $("#HospitalName").html("Welcome " + hospitalName);
-        $("#RoomName").html(bedNumber);
-
+            $("#HospitalName").html("Welcome " + hospitalName);
+            $("#RoomName").html(bedNumber);
         });
+
         function goBackMDC() {
+            if (typeof window.closeVideoOverlay === "function") {
+                window.closeVideoOverlay();
+            }
+            var params = new URLSearchParams(window.location.search);
+            var ctx = (window.BedContext && typeof window.BedContext.get === 'function')
+                ? window.BedContext.get()
+                : {};
+            var bedInfo = params.get('BedInfo')
+                || ctx.bedInfo
+                || sessionStorage.getItem('bedInfo')
+                || @Json.Serialize((string)(ViewBag.bedInfoEncrypt ?? ""))
+                || '';
+            var region = params.get('region') || ctx.region || '';
+            var tenantId = params.get('XTenantID') || ctx.tenantId || '';
 
-             var bedInfoEncrypt = '@ViewBag.bedInfoEncrypt';
+            var url = '@Url.Action("Index", "MyDailyCare")' + '?BedInfo=' + encodeURIComponent(bedInfo);
+            if (region) url += '&region=' + encodeURIComponent(region);
+            if (tenantId) url += '&XTenantID=' + encodeURIComponent(tenantId);
+            if (params.get('Unified') === '1' || params.get('UnifiedAI') === '1' || window.UnifiedAIChild) {
+                url += '&Unified=1&UnifiedAI=1';
+            }
 
-            var url = '@Url.Action("Index", "MyDailyCare")';
-             window.location.href = url + '?BedInfo='+encodeURIComponent( bedInfoEncrypt);
-
-
+            if (window.UnifiedAIChild && typeof window.UnifiedAIChild.navigate === 'function') {
+                window.UnifiedAIChild.navigate(url);
+            } else {
+                window.location.href = url;
+            }
         }
     </script>
 </div>
-<script src="~/js/MyLibrary.js"></script>
+<script src="~/js/MyLibrary.js" asp-append-version="true"></script>
 <script src="~/js/layout_DailyCare.js"></script>

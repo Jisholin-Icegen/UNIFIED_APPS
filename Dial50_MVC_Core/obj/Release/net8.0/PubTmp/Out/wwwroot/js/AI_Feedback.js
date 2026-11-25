@@ -1216,79 +1216,183 @@ async function talkToGraceAgain() {
 }
 
 const feedbackVadConfig = (CLIENT_CONFIG && CLIENT_CONFIG.VAD) || {};
-const feedbackLocalBargeIn = feedbackVadConfig.localBargeIn === true;
+const feedbackLocalBargeIn = feedbackVadConfig.localBargeIn !== false;
 
-class FeedbackLocalVoiceActivityDetector {
+class FeedbackSileroVoiceActivityDetector {
     constructor(options = {}) {
-        this.sampleRate = options.sampleRate || 24000;
-        this.energyThreshold = typeof options.threshold === "number" ? options.threshold : 0.01;
-        this.endThreshold = typeof options.speechEndThreshold === "number" ? options.speechEndThreshold : 0.0072;
-        this.duckingThreshold = typeof options.duckingThreshold === "number" ? options.duckingThreshold : 0.065;
-        this.duckingEndThreshold = this.duckingThreshold * 0.72;
-        this.silenceDurationMs = typeof options.silenceDurationMs === "number" ? options.silenceDurationMs : 600;
+        this.modelPath = options.modelPath || feedbackVadConfig.modelPath || "/models/silero-vad.onnx";
+        this.inputSampleRate = 16000;
+        this.sourceSampleRate = options.sourceSampleRate || 24000;
+        this.frameSize = 512;
+        this.contextSize = 64;
+        this.threshold = typeof options.threshold === "number" ? options.threshold : 0.5;
         this.speechStartDurationMs = typeof options.speechStartDurationMs === "number" ? options.speechStartDurationMs : 180;
         this.bargeInStartDurationMs = typeof options.bargeInStartDurationMs === "number" ? options.bargeInStartDurationMs : 220;
+        this.silenceDurationMs = typeof options.silenceDurationMs === "number" ? options.silenceDurationMs : 600;
+        this.isReady = false;
         this.isSpeaking = false;
-        this.silenceTimeMs = 0;
+        this.session = null;
+        this.state = new Float32Array(2 * 128);
+        this.context = new Float32Array(this.contextSize);
+        this.sampleBuffer = [];
         this.speechTimeMs = 0;
-        this.lastRms = 0;
+        this.silenceTimeMs = 0;
+        this.inferenceQueue = Promise.resolve();
+        this.lastProbability = 0;
     }
 
-    calculateRMS(samples) {
-        if (!samples || !samples.length) return 0;
-        let sumSquares = 0;
-        let count = 0;
-        // Sample every other PCM value to keep per-frame CPU cost low.
-        for (let i = 0; i < samples.length; i += 2) {
-            const sample = samples[i];
-            sumSquares += sample * sample;
-            count++;
+    async loadRuntime() {
+        if (window.ort) return window.ort;
+        const existing = document.querySelector('script[data-feedback-onnx-runtime="true"]');
+        if (existing) {
+            await new Promise((resolve, reject) => {
+                if (window.ort) return resolve();
+                existing.addEventListener("load", resolve, { once: true });
+                existing.addEventListener("error", reject, { once: true });
+            });
+            if (window.ort) return window.ort;
         }
-        if (!count) return 0;
-        const rms = Math.sqrt(sumSquares / count);
-        return samples instanceof Int16Array ? rms / 32768 : rms;
+        await new Promise((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js";
+            script.async = true;
+            script.dataset.feedbackOnnxRuntime = "true";
+            script.onload = resolve;
+            script.onerror = () => reject(new Error("Unable to load ONNX Runtime Web from jsDelivr."));
+            document.head.appendChild(script);
+        });
+        if (!window.ort) throw new Error("ONNX Runtime script loaded, but window.ort is unavailable.");
+        return window.ort;
     }
 
-    process(samples, sampleRate, onSpeechStart, onSpeechEnd, playbackActive = false) {
-        if (!samples || !samples.length) return;
-        const rms = this.calculateRMS(samples);
-        this.lastRms = rms;
-        const durationMs = samples.length / (sampleRate || this.sampleRate) * 1000;
-        const onset = playbackActive ? this.duckingThreshold : this.energyThreshold;
-        const sustain = playbackActive ? this.duckingEndThreshold : this.endThreshold;
-        const debounce = playbackActive ? this.bargeInStartDurationMs : this.speechStartDurationMs;
-        const voiceEnergy = rms > (this.isSpeaking ? sustain : onset);
+    async load() {
+        try {
+            const ort = await this.loadRuntime();
+            if (ort.env && ort.env.wasm) {
+                ort.env.wasm.numThreads = 1;
+            }
+            this.session = await ort.InferenceSession.create(this.modelPath, {
+                executionProviders: ["wasm"],
+                graphOptimizationLevel: "all"
+            });
 
-        if (voiceEnergy) {
+            const inputs = this.session.inputNames || [];
+            const outputs = this.session.outputNames || [];
+            if (!inputs.includes("input") || !inputs.includes("state") || !inputs.includes("sr")) {
+                throw new Error(`Unexpected Silero model inputs: ${inputs.join(", ")}`);
+            }
+            if (!outputs.includes("output") || !outputs.includes("stateN")) {
+                throw new Error(`Unexpected Silero model outputs: ${outputs.join(", ")}`);
+            }
+
+            this.isReady = true;
+            console.info("[Feedback VAD] Silero Neural VAD loaded successfully", {
+                model: this.modelPath,
+                runtime: "ONNX Runtime Web / WASM",
+                sourceSampleRate: this.sourceSampleRate,
+                inferenceSampleRate: this.inputSampleRate,
+                frameSize: this.frameSize
+            });
+            return true;
+        } catch (error) {
+            this.isReady = false;
+            console.error("[Feedback VAD] Silero failed to load or initialize. Check model URL, model file and ONNX compatibility.", error);
+            return false;
+        }
+    }
+
+    resampleTo16k(samples, sourceRate) {
+        if (sourceRate === 16000) return samples;
+        const ratio = sourceRate / 16000;
+        const outputLength = Math.floor(samples.length / ratio);
+        const output = new Float32Array(outputLength);
+        for (let i = 0; i < outputLength; i++) {
+            const sourceIndex = i * ratio;
+            const left = Math.floor(sourceIndex);
+            const right = Math.min(left + 1, samples.length - 1);
+            const fraction = sourceIndex - left;
+            output[i] = samples[left] * (1 - fraction) + samples[right] * fraction;
+        }
+        return output;
+    }
+
+    process(pcm16, sourceRate, callbacks = {}, playbackActive = false) {
+        if (!this.isReady || !pcm16 || !pcm16.length) return;
+        const floatSamples = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) {
+            floatSamples[i] = pcm16[i] / 32768;
+        }
+        const resampled = this.resampleTo16k(floatSamples, sourceRate || this.sourceSampleRate);
+        for (let i = 0; i < resampled.length; i++) this.sampleBuffer.push(resampled[i]);
+
+        while (this.sampleBuffer.length >= this.frameSize) {
+            const frame = new Float32Array(this.frameSize);
+            for (let i = 0; i < this.frameSize; i++) frame[i] = this.sampleBuffer[i];
+            this.sampleBuffer.splice(0, this.frameSize);
+            this.inferenceQueue = this.inferenceQueue
+                .then(() => this.inferFrame(frame, callbacks, playbackActive))
+                .catch(error => console.error("[Feedback VAD] Silero inference failed:", error));
+        }
+    }
+
+    async inferFrame(frame, callbacks, playbackActive) {
+        if (!this.isReady || !this.session) return;
+        const ort = window.ort;
+        const input = new Float32Array(this.contextSize + this.frameSize);
+        input.set(this.context, 0);
+        input.set(frame, this.contextSize);
+
+        const feeds = {
+            input: new ort.Tensor("float32", input, [1, input.length]),
+            state: new ort.Tensor("float32", this.state, [2, 1, 128]),
+            sr: new ort.Tensor("int64", new BigInt64Array([16000n]), [])
+        };
+        const results = await this.session.run(feeds);
+        const probability = results.output.data[0];
+        this.state = new Float32Array(results.stateN.data);
+        this.context.set(frame.subarray(frame.length - this.contextSize));
+        this.lastProbability = probability;
+
+        const frameDurationMs = this.frameSize / this.inputSampleRate * 1000;
+        const speechDetected = probability >= this.threshold;
+        if (speechDetected) {
             this.silenceTimeMs = 0;
             if (!this.isSpeaking) {
-                this.speechTimeMs += durationMs;
-                if (this.speechTimeMs >= debounce) {
+                this.speechTimeMs += frameDurationMs;
+                const requiredDuration = playbackActive ? this.bargeInStartDurationMs : this.speechStartDurationMs;
+                if (this.speechTimeMs >= requiredDuration) {
                     this.isSpeaking = true;
                     this.speechTimeMs = 0;
-                    if (typeof onSpeechStart === "function") onSpeechStart(rms);
+                    console.debug("[Feedback VAD] Silero speech detected", { probability });
+                    callbacks.onSpeechStart?.(probability);
                 }
             }
         } else if (!this.isSpeaking) {
-            this.speechTimeMs = Math.max(0, this.speechTimeMs - durationMs);
+            this.speechTimeMs = Math.max(0, this.speechTimeMs - frameDurationMs);
         } else {
-            this.silenceTimeMs += durationMs;
+            this.silenceTimeMs += frameDurationMs;
             if (this.silenceTimeMs >= this.silenceDurationMs) {
                 this.isSpeaking = false;
                 this.silenceTimeMs = 0;
                 this.speechTimeMs = 0;
-                if (typeof onSpeechEnd === "function") onSpeechEnd(rms);
+                console.debug("[Feedback VAD] Silero speech ended", { probability });
+                callbacks.onSpeechEnd?.(probability);
             }
         }
     }
 
     reset() {
         this.isSpeaking = false;
-        this.silenceTimeMs = 0;
+        this.state = new Float32Array(2 * 128);
+        this.context = new Float32Array(this.contextSize);
+        this.sampleBuffer = [];
         this.speechTimeMs = 0;
-        this.lastRms = 0;
+        this.silenceTimeMs = 0;
+        this.lastProbability = 0;
+        this.inferenceQueue = Promise.resolve();
     }
 }
+
 
 // =========================================================
 // FEEDBACK VOICE CLIENT
@@ -1406,18 +1510,16 @@ class FeedbackVoiceClient {
 
         /*
          * =====================================================
-         * LOCAL VAD CONFIG
+         * Silero VAD CONFIG
          *
-         * Threshold raised from 0.01 -> 0.02, and speech-start
-         * debounce raised from 150 -> 200ms. See header (3b).
+         * The detector calibrates ambient RMS before applying
+         * an adaptive speech threshold.
          * =====================================================
          */
 
-        this.vad = new FeedbackLocalVoiceActivityDetector({
-            sampleRate: 24000,
-            threshold: typeof feedbackVadConfig.threshold === "number" ? feedbackVadConfig.threshold : 0.01,
-            speechEndThreshold: typeof feedbackVadConfig.speechEndThreshold === "number" ? feedbackVadConfig.speechEndThreshold : 0.0072,
-            duckingThreshold: typeof feedbackVadConfig.duckingThreshold === "number" ? feedbackVadConfig.duckingThreshold : 0.065,
+        this.vad = new FeedbackSileroVoiceActivityDetector({
+            sourceSampleRate: 24000,
+            threshold: typeof feedbackVadConfig.threshold === "number" ? feedbackVadConfig.threshold : 0.5,
             silenceDurationMs: typeof feedbackVadConfig.silenceDurationMs === "number" ? feedbackVadConfig.silenceDurationMs : 600,
             speechStartDurationMs: typeof feedbackVadConfig.speechStartDurationMs === "number" ? feedbackVadConfig.speechStartDurationMs : 180,
             bargeInStartDurationMs: typeof feedbackVadConfig.bargeInStartDurationMs === "number" ? feedbackVadConfig.bargeInStartDurationMs : 220
@@ -1429,7 +1531,7 @@ class FeedbackVoiceClient {
          * assistant audio source.
          *
          * This allows immediate browser-side
-         * barge-in when Local VAD detects speech.
+         * barge-in when Silero VAD detects speech.
          */
 
         this.playbackSources =
@@ -1785,6 +1887,9 @@ class FeedbackVoiceClient {
     async startMicrophone() {
 
         try {
+            // Silero inference uses a 16 kHz copy of the 24 kHz mic stream.
+            // The original 24 kHz PCM continues to the backend unchanged.
+            await this.vad.load();
 
             this.audioContext =
                 new (
@@ -1920,25 +2025,21 @@ class FeedbackVoiceClient {
                     this.playbackSources.size > 0 &&
                     this.audioContext.currentTime < this.nextPlayTime
                 );
-                this.vad.process(
-                    pcm16,
-                    24000,
-                    (rms) => {
-
+                this.vad.process(pcm16, 24000, {
+                    onSpeechStart: (probability) => {
                         if (feedbackLocalBargeIn && playbackActive) this.stopPlayback();
                         const state = callOverlay?.dataset?.callState || null;
-                        if (state === "speaking" || state === "agent_speaking" || state === "thinking") {
+                        if (feedbackLocalBargeIn && (state === "speaking" || state === "agent_speaking" || state === "thinking")) {
                             this.callbacks?.onStateChange?.("listening");
                         }
-                        this.callbacks?.onUserSpeechStart?.(rms);
+                        this.callbacks?.onUserSpeechStart?.(probability);
                     },
-                    (rms) => {
+                    onSpeechEnd: (probability) => {
                         const state = callOverlay?.dataset?.callState || null;
-                        if (state === "listening") this.callbacks?.onStateChange?.("thinking");
-                        this.callbacks?.onUserSpeechEnd?.(rms);
-                    },
-                    playbackActive
-                );
+                        if (feedbackLocalBargeIn && state === "listening") this.callbacks?.onStateChange?.("thinking");
+                        this.callbacks?.onUserSpeechEnd?.(probability);
+                    }
+                }, playbackActive);
                 this.ws.send(event.data);
             };
 
@@ -2371,12 +2472,12 @@ async function openCall(langOverride = null) {
 
             onUserSpeechStart: (rms) => {
                 if (callOverlay) callOverlay.dataset.vad = "speech";
-                console.debug(`[Feedback VAD] User speaking | RMS=${rms.toFixed(4)}`);
+                console.debug(`[Feedback VAD] User speaking | Silero probability=${rms.toFixed(4)}`);
             },
 
             onUserSpeechEnd: (rms) => {
                 if (callOverlay) callOverlay.dataset.vad = "silence";
-                console.debug(`[Feedback VAD] User stopped speaking | RMS=${rms.toFixed(4)}`);
+                console.debug(`[Feedback VAD] User stopped speaking | Silero probability=${rms.toFixed(4)}`);
             },
 
             onError: (err) => {

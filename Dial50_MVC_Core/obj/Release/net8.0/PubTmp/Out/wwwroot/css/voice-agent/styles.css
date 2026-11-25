@@ -931,7 +931,7 @@ body[data-state="ended"] .ended-layer {
    IDLE / FIRST PAGE
    ========================================================= */
 
-body[data-state="idle"] #interactiveCard {
+body:is([data-state="idle"], [data-call-presentation="minimized"]) #interactiveCard {
     flex: 0 0 260px !important;
     height: 260px !important;
     min-height: 260px !important;
@@ -947,9 +947,9 @@ body[data-state="idle"] #interactiveCard {
 
 
 /* Call screens use available space */
-body[data-state="connecting"] #interactiveCard,
-body[data-state="connected"] #interactiveCard,
-body[data-state="ended"] #interactiveCard {
+body[data-state="connecting"]:not([data-call-presentation="minimized"]) #interactiveCard,
+body[data-state="connected"]:not([data-call-presentation="minimized"]) #interactiveCard,
+body[data-state="ended"]:not([data-call-presentation="minimized"]) #interactiveCard {
     position: relative !important;
     inset: auto !important;
     width: 100% !important;
@@ -998,44 +998,44 @@ body[data-state="ended"] #interactiveCard {
 }
 
 /* idle: show nav row, hide title bar */
-body[data-state="idle"] .assistant-titlebar {
+body:is([data-state="idle"], [data-call-presentation="minimized"]) .assistant-titlebar {
     display: none;
 }
 
-body[data-state="idle"] #pageNav {
+body:is([data-state="idle"], [data-call-presentation="minimized"]) #pageNav {
     display: block;
 }
 
-body[data-state="idle"] #widgetPrompt {
+body:is([data-state="idle"], [data-call-presentation="minimized"]) #widgetPrompt {
     display: block !important;
 }
 
-body[data-state="idle"] #bottomCard {
+body:is([data-state="idle"], [data-call-presentation="minimized"]) #bottomCard {
     display: block;
 }
 
 /* connecting/connected/ended: hide nav row, show title bar */
-body[data-state="connecting"] .assistant-titlebar,
-body[data-state="connected"] .assistant-titlebar,
-body[data-state="ended"] .assistant-titlebar {
+body[data-state="connecting"]:not([data-call-presentation="minimized"]) .assistant-titlebar,
+body[data-state="connected"]:not([data-call-presentation="minimized"]) .assistant-titlebar,
+body[data-state="ended"]:not([data-call-presentation="minimized"]) .assistant-titlebar {
     display: flex;
 }
 
-body[data-state="connecting"] #pageNav,
-body[data-state="connected"] #pageNav,
-body[data-state="ended"] #pageNav {
+body[data-state="connecting"]:not([data-call-presentation="minimized"]) #pageNav,
+body[data-state="connected"]:not([data-call-presentation="minimized"]) #pageNav,
+body[data-state="ended"]:not([data-call-presentation="minimized"]) #pageNav {
     display: none;
 }
 
-body[data-state="connecting"] #widgetPrompt,
-body[data-state="connected"] #widgetPrompt,
-body[data-state="ended"] #widgetPrompt {
+body[data-state="connecting"]:not([data-call-presentation="minimized"]) #widgetPrompt,
+body[data-state="connected"]:not([data-call-presentation="minimized"]) #widgetPrompt,
+body[data-state="ended"]:not([data-call-presentation="minimized"]) #widgetPrompt {
     display: none !important;
 }
 
-body[data-state="connecting"] #bottomCard,
-body[data-state="connected"] #bottomCard,
-body[data-state="ended"] #bottomCard {
+body[data-state="connecting"]:not([data-call-presentation="minimized"]) #bottomCard,
+body[data-state="connected"]:not([data-call-presentation="minimized"]) #bottomCard,
+body[data-state="ended"]:not([data-call-presentation="minimized"]) #bottomCard {
     display: none;
 }
 

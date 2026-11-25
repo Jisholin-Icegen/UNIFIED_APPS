@@ -55,6 +55,7 @@ function renderServiceCards(container, data) {
     servicesData.forEach(function (service) {
         var card = document.createElement("div");
         card.className = "service-card";
+        card.dataset.categoryId = service.CategoryId;
         card.innerHTML =
             '<div class="icon-box">' +
             '<img src="/' + service.CategoryImage + '" alt="" loading="lazy" decoding="async">' +
@@ -146,8 +147,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
                     if (!res || !res.success) {
                         hideRequestLoading();
+                        if (window.__unifiedAIRequestAction && window.UnifiedAIChild) {
+                            window.UnifiedAIChild.respond(window.__unifiedAIRequestAction, false, null, (res && res.message) || "Request failed.");
+                            window.__unifiedAIRequestAction = null;
+                        }
                         alert("Failed: " + ((res && res.message) || "Unknown error"));
                         return;
+                    }
+
+                    if (window.__unifiedAIRequestAction && window.UnifiedAIChild) {
+                        window.UnifiedAIChild.respond(window.__unifiedAIRequestAction, true, { requestNo: res.requestNo || null });
+                        window.__unifiedAIRequestAction = null;
                     }
 
                     closeModal();
@@ -204,6 +214,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 .fail(function (xhr) {
 
                     hideRequestLoading();
+                    if (window.__unifiedAIRequestAction && window.UnifiedAIChild) {
+                        window.UnifiedAIChild.respond(window.__unifiedAIRequestAction, false, null, "Request failed with HTTP " + xhr.status + ".");
+                        window.__unifiedAIRequestAction = null;
+                    }
 
                     alert("Error: " + xhr.status + " " + xhr.statusText);
                 })
@@ -833,9 +847,90 @@ window.nextRequest = nextRequest;
 window.goToRequestIndex = goToRequestIndex;
 
 function DailCareRedirect(RedirectURL) {
-    window.location.href = RedirectURL;
+    if (window.UnifiedAIChild) {
+        window.UnifiedAIChild.navigate(RedirectURL);
+    } else {
+        window.location.href = RedirectURL;
+    }
 }
 
 document.addEventListener("DOMContentLoaded", function () {
     loadTasks();
+});
+
+window.addEventListener("unified-ai:action", function (event) {
+    var action = event.detail;
+    if (!action || (action.action !== "request.options" && action.action !== "request.create") || action.module !== "room_comfort") return;
+
+    taskTypesPromise.done(function (data) {
+        var container = document.getElementById("servicesContainer");
+        if (!servicesData.length && container) renderServiceCards(container, data);
+
+        var availableServices = (data || []).filter(function (service) {
+            return service.CategoryDescription
+                && service.CategoryDescription.trim()
+                && service.CategoryDescription.toUpperCase() !== "PREPARE GUEST PASS";
+        });
+
+        if (action.action === "request.options") {
+            if (window.UnifiedAIChild) {
+                window.UnifiedAIChild.respond(action, true, {
+                    categories: availableServices.map(function (service) {
+                        return { id: service.CategoryId, name: service.CategoryDescription };
+                    })
+                });
+            }
+            return;
+        }
+
+        var categoryText = action.category || action.categoryName || action.serviceName || action.taskName || "";
+        var service = availableServices.find(function (item) {
+            return action.categoryId != null && String(item.CategoryId) === String(action.categoryId);
+        }) || (window.UnifiedAIChild && window.UnifiedAIChild.resolveRequestCategory
+            ? window.UnifiedAIChild.resolveRequestCategory(availableServices, categoryText)
+            : null);
+        if (!service) {
+            if (window.UnifiedAIChild) {
+                window.UnifiedAIChild.respond(action, false, {
+                    availableCategories: availableServices.map(function (item) { return item.CategoryDescription; })
+                }, "Could not uniquely match the requested room-comfort service. Ask the patient to clarify.");
+            }
+            return;
+        }
+
+        var card = Array.from(container ? container.querySelectorAll(".service-card") : []).find(function (item) {
+            var title = item.querySelector(".service-title");
+            return title && title.textContent.trim().toLowerCase() === service.CategoryDescription.trim().toLowerCase();
+        });
+        if (!card) {
+            if (window.UnifiedAIChild) window.UnifiedAIChild.respond(action, false, null, "The selected service card is unavailable.");
+            return;
+        }
+
+        window.__unifiedAIRequestAction = action;
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        card.click();
+        var remarksInput = document.getElementById("modalRemarks");
+        var remarks = action.remarks || action.patientRemarks || action.details || action.description
+            || action.comment || action.userRequest || action.transcript || action.message
+            || action.categoryName || action.category || "";
+        if (remarksInput) {
+            remarksInput.value = String(remarks).slice(0, 1000);
+            remarksInput.dispatchEvent(new Event("input", { bubbles: true }));
+            remarksInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        var quantityInput = document.getElementById("txtQuantity");
+        if (quantityInput && Number.isInteger(Number(action.quantity))) {
+            quantityInput.value = String(Math.max(1, Math.min(20, Number(action.quantity))));
+        }
+        var submitButton = document.getElementById("modalSubmit");
+        if (!submitButton) {
+            window.__unifiedAIRequestAction = null;
+            if (window.UnifiedAIChild) window.UnifiedAIChild.respond(action, false, null, "Request form is unavailable.");
+            return;
+        }
+        submitButton.click();
+    }).fail(function () {
+        if (window.UnifiedAIChild) window.UnifiedAIChild.respond(action, false, null, "Could not load room-comfort services.");
+    });
 });

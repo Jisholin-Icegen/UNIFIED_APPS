@@ -59,7 +59,7 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) {
+    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]):not([data-call-presentation="minimized"]) {
         height: 100vh;
         height: 100dvh;
         overflow: hidden;
@@ -106,7 +106,7 @@ a {
     user-select: none;
 }
 
-body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper {
+body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]):not([data-call-presentation="minimized"]) .app-wrapper {
     height: 100vh;
     height: 100dvh;
     min-height: 0;
@@ -154,13 +154,13 @@ body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"
         overflow-y: hidden;
     }
 
-    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) {
+    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]):not([data-call-presentation="minimized"]) {
         padding: 0;
         align-items: flex-start;
         background: var(--app-bg);
     }
 
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper {
+        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]):not([data-call-presentation="minimized"]) .app-wrapper {
             height: 100vh;
             height: 100dvh;
             max-height: 100vh;
@@ -1866,7 +1866,7 @@ html body .lang-switcher {
 
 /* Call mode - fullscreen */
 @media (min-width: 768px) {
-    html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ) #pageContent.content {
+    html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ):not([data-call-presentation="minimized"]) #pageContent.content {
         display: flex !important;
         flex-direction: column !important;
         grid-template-columns: none !important;
@@ -1881,7 +1881,7 @@ html body .lang-switcher {
         background: #0f172a !important;
     }
 
-        html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ) #pageContent.content > #interactiveCard {
+        html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ):not([data-call-presentation="minimized"]) #pageContent.content > #interactiveCard {
             position: relative !important;
             display: flex !important;
             flex: 1 1 auto !important;
@@ -1898,8 +1898,8 @@ html body .lang-switcher {
             overflow: hidden !important;
         }
 
-        html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ) #pageContent.content > .patfeedback-card,
-        html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ) #pageContent.content > .patient-status-card {
+        html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ):not([data-call-presentation="minimized"]) #pageContent.content > .patfeedback-card,
+        html body:is( [data-state="connecting"], [data-state="connected"], [data-state="ended"] ):not([data-call-presentation="minimized"]) #pageContent.content > .patient-status-card {
             display: none !important;
         }
 }
