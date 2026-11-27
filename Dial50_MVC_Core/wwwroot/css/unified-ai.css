@@ -58,6 +58,7 @@
     width: fit-content;
     min-width: min(300px, calc(100vw - 24px));
     max-width: min(var(--uai-bar-max-width), calc(100vw - 24px));
+    height: 66px;
     min-height: 66px;
     padding: 8px 11px 8px 13px;
     overflow: hidden;
@@ -73,7 +74,8 @@
     user-select: none;
     -webkit-user-select: none;
     touch-action: none;
-    transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1), min-width 0.35s cubic-bezier(0.22, 1, 0.36, 1), padding 0.35s cubic-bezier(0.22, 1, 0.36, 1), gap 0.35s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+    will-change: width, height, left, top;
+    transition: width 0.38s cubic-bezier(0.22, 1, 0.36, 1), min-width 0.38s cubic-bezier(0.22, 1, 0.36, 1), max-width 0.38s cubic-bezier(0.22, 1, 0.36, 1), height 0.38s cubic-bezier(0.22, 1, 0.36, 1), min-height 0.38s cubic-bezier(0.22, 1, 0.36, 1), padding 0.38s cubic-bezier(0.22, 1, 0.36, 1), gap 0.38s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, box-shadow 0.25s ease, background 0.25s ease;
 }
 
     #unifiedAiFloatingBar:hover {
@@ -90,55 +92,138 @@
     #unifiedAiFloatingBar #unifiedAiBarMicButton,
     #unifiedAiFloatingBar .unified-ai-bar-action,
     #unifiedAiFloatingBar #unifiedAiBarGrip {
-        transition: opacity 0.2s ease, transform 0.25s ease;
+        transition: opacity 0.18s ease, transform 0.25s ease;
     }
 
     #unifiedAiFloatingBar.is-minimized {
-        width: 66px;
-        min-width: 66px;
-        height: 66px;
-        min-height: 66px;
-        padding: 0;
-        gap: 0;
-        justify-content: center;
-        cursor: pointer;
+        width: 66px !important;
+        min-width: 66px !important;
+        max-width: 66px !important;
+        height: 66px !important;
+        min-height: 66px !important;
+        padding: 0 !important;
+        gap: 0 !important;
+        justify-content: center !important;
+        border-radius: 999px !important;
+        overflow: visible !important;
+        background: radial-gradient(circle at 35% 30%, #0e2433 0%, #061018 75%) !important;
+        border-color: rgba(46, 224, 210, 0.85) !important;
+        box-shadow: 0 0 20px rgba(46, 224, 210, 0.45), 0 0 38px rgba(0, 240, 255, 0.22) !important;
+        cursor: grab !important;
     }
+
+        #unifiedAiFloatingBar.is-minimized.is-dragging {
+            cursor: grabbing !important;
+        }
 
         #unifiedAiFloatingBar.is-minimized .unified-ai-bar-copy,
         #unifiedAiFloatingBar.is-minimized #unifiedAiBarMicButton,
         #unifiedAiFloatingBar.is-minimized .unified-ai-bar-action,
         #unifiedAiFloatingBar.is-minimized #unifiedAiBarGrip {
-            display: none;
+            display: none !important;
         }
 
         #unifiedAiFloatingBar.is-minimized #unifiedAiReturnButton {
-            width: 100%;
-            height: 100%;
-            justify-content: center;
-            gap: 0;
+            position: relative !important;
+            z-index: 3 !important;
+            width: 100% !important;
+            height: 100% !important;
+            justify-content: center !important;
+            gap: 0 !important;
+            pointer-events: none !important;
         }
 
             #unifiedAiFloatingBar.is-minimized #unifiedAiReturnButton img {
-                width: 48px;
-                height: 48px;
-                flex-basis: 48px;
-                border-color: var(--uai-cyan);
-                box-shadow: 0 0 14px rgba(0, 240, 255, 0.35);
+                width: 50px !important;
+                height: 50px !important;
+                flex: 0 0 50px !important;
+                border-color: rgba(46, 224, 210, 0.9) !important;
+                box-shadow: 0 0 16px rgba(46, 224, 210, 0.55) !important;
             }
 
-        #unifiedAiFloatingBar.is-minimized::after {
-            content: "";
-            position: absolute;
-            right: 9px;
-            bottom: 9px;
-            width: 11px;
-            height: 11px;
-            border: 2px solid #0B1224;
-            border-radius: 50%;
-            background: var(--uai-green);
-            animation: uaiLivePulse 1.8s ease-in-out infinite;
-            pointer-events: none;
-        }
+.uai-minimized-aura {
+    display: none;
+}
+
+#unifiedAiFloatingBar.is-minimized .uai-minimized-aura {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 118px;
+    height: 118px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    z-index: 1;
+    filter: drop-shadow(0 0 6px rgba(46, 224, 210, 0.8)) drop-shadow(0 0 14px rgba(0, 240, 255, 0.35));
+}
+
+.uai-aura-ring-outer {
+    transform-origin: 59px 59px;
+    animation: uaiAuraRingShrink 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.uai-aura-ring-inner {
+    transform-origin: 59px 59px;
+    animation: uaiAuraInnerShrink 0.75s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.uai-aura-rays line {
+    transform-origin: 59px 59px;
+    stroke: #2ee0d2;
+    stroke-linecap: round;
+    animation: uaiStylishRayPulse 0.62s cubic-bezier(0.35, 0, 0.25, 1) infinite;
+}
+
+    .uai-aura-rays line:nth-child(2n) {
+        stroke: #00f0ff;
+        animation-delay: -0.15s;
+    }
+
+    .uai-aura-rays line:nth-child(3n) {
+        stroke: #5cf2e4;
+        animation-delay: -0.3s;
+    }
+
+    .uai-aura-rays line:nth-child(4n) {
+        animation-delay: -0.45s;
+    }
+
+@keyframes uaiAuraRingShrink {
+    0%, 100% {
+        transform: scale(1.04);
+        opacity: 0.32;
+    }
+
+    50% {
+        transform: scale(0.8);
+        opacity: 0.9;
+    }
+}
+
+@keyframes uaiAuraInnerShrink {
+    0%, 100% {
+        transform: scale(0.92);
+        opacity: 0.75;
+    }
+
+    50% {
+        transform: scale(1.03);
+        opacity: 0.35;
+    }
+}
+
+@keyframes uaiStylishRayPulse {
+    0%, 100% {
+        transform: scale(1.09);
+        opacity: 0.98;
+    }
+
+    50% {
+        transform: scale(0.74);
+        opacity: 0.42;
+    }
+}
 
 #unifiedAiReturnButton {
     display: flex;
@@ -304,6 +389,7 @@
     cursor: grabbing;
     border-color: rgba(0, 240, 255, 0.55);
     box-shadow: 0 24px 52px rgba(0, 0, 0, 0.75), 0 0 28px rgba(0, 240, 255, 0.22), var(--uai-rim-light);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
 }
 
 #unifiedAiBarGrip {
@@ -536,7 +622,10 @@ html body #unifiedAiSuggestions .uai-chip-close {
     }
 
 @media (prefers-reduced-motion: reduce) {
-    #unifiedAiBarStatus::before {
+    #unifiedAiBarStatus::before,
+    #unifiedAiFloatingBar.is-minimized .uai-aura-ring-outer,
+    #unifiedAiFloatingBar.is-minimized .uai-aura-ring-inner,
+    #unifiedAiFloatingBar.is-minimized .uai-aura-rays line {
         animation: none;
     }
 }
@@ -544,15 +633,17 @@ html body #unifiedAiSuggestions .uai-chip-close {
 @media (max-width: 480px) {
     #unifiedAiFloatingBar {
         gap: 8px;
+        height: 62px;
         min-height: 62px;
         padding: 7px 9px 7px 11px;
     }
 
         #unifiedAiFloatingBar.is-minimized {
-            width: 62px;
-            min-width: 62px;
-            height: 62px;
-            min-height: 62px;
+            width: 62px !important;
+            min-width: 62px !important;
+            max-width: 62px !important;
+            height: 62px !important;
+            min-height: 62px !important;
         }
 
     #unifiedAiReturnButton {
@@ -634,122 +725,4 @@ html body #unifiedAiSuggestions .uai-chip-close {
     letter-spacing: 0.05em;
     font-variant-numeric: tabular-nums;
     text-align: center;
-}
-
-#unifiedAiFloatingBar.is-dragging {
-    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
-}
-
-#unifiedAiFloatingBar.is-minimized {
-    width: 66px !important;
-    min-width: 66px !important;
-    max-width: 66px !important;
-    height: 66px !important;
-    min-height: 66px !important;
-    padding: 0 !important;
-    gap: 0 !important;
-    justify-content: center !important;
-    border-radius: 50% !important;
-    overflow: visible !important;
-    background: #08131d !important;
-    border-color: rgba(46, 224, 210, 0.75) !important;
-    box-shadow: 0 0 20px rgba(46, 224, 210, 0.45), 0 0 38px rgba(0, 240, 255, 0.22) !important;
-    cursor: pointer !important;
-}
-
-    #unifiedAiFloatingBar.is-minimized .unified-ai-bar-copy,
-    #unifiedAiFloatingBar.is-minimized #unifiedAiBarMicButton,
-    #unifiedAiFloatingBar.is-minimized .unified-ai-bar-action,
-    #unifiedAiFloatingBar.is-minimized #unifiedAiBarGrip {
-        display: none !important;
-    }
-
-    #unifiedAiFloatingBar.is-minimized #unifiedAiReturnButton {
-        position: relative !important;
-        z-index: 3 !important;
-        width: 100% !important;
-        height: 100% !important;
-        justify-content: center !important;
-        gap: 0 !important;
-    }
-
-        #unifiedAiFloatingBar.is-minimized #unifiedAiReturnButton img {
-            width: 50px !important;
-            height: 50px !important;
-            flex: 0 0 50px !important;
-            border-color: rgba(46, 224, 210, 0.85) !important;
-            box-shadow: 0 0 16px rgba(46, 224, 210, 0.55) !important;
-        }
-
-.uai-minimized-aura {
-    display: none;
-}
-
-#unifiedAiFloatingBar.is-minimized .uai-minimized-aura {
-    display: block;
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 112px;
-    height: 112px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 1;
-    filter: drop-shadow(0 0 8px rgba(46, 224, 210, 0.75)) drop-shadow(0 0 16px rgba(0, 240, 255, 0.35));
-}
-
-.uai-aura-ring {
-    transform-origin: 56px 56px;
-    animation: uaiRingShrinkPulse 0.72s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-.uai-aura-rays line {
-    transform-origin: 56px 56px;
-    stroke: #2ee0d2;
-    stroke-linecap: round;
-    animation: uaiRayShrinkFast 0.58s cubic-bezier(0.35, 0, 0.25, 1) infinite;
-}
-
-    .uai-aura-rays line:nth-child(2n) {
-        stroke: #00f0ff;
-        animation-delay: -0.14s;
-    }
-
-    .uai-aura-rays line:nth-child(3n) {
-        animation-delay: -0.28s;
-    }
-
-    .uai-aura-rays line:nth-child(4n) {
-        animation-delay: -0.42s;
-    }
-
-@keyframes uaiRingShrinkPulse {
-    0%, 100% {
-        transform: scale(1);
-        opacity: 0.45;
-    }
-
-    50% {
-        transform: scale(0.76);
-        opacity: 0.95;
-    }
-}
-
-@keyframes uaiRayShrinkFast {
-    0%, 100% {
-        transform: scale(1.08);
-        opacity: 0.95;
-    }
-
-    50% {
-        transform: scale(0.72);
-        opacity: 0.45;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    #unifiedAiFloatingBar.is-minimized .uai-aura-ring,
-    #unifiedAiFloatingBar.is-minimized .uai-aura-rays line {
-        animation: none;
-    }
 }

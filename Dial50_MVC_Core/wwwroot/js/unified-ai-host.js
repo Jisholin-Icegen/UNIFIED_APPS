@@ -51,13 +51,69 @@
     let screenWakeLock = null;
     let wakeLockRequestPending = false;
     let suppressReturnClickUntil = 0;
-    let dragState = null;
     let callPresentation = "full";
+    let openingChat = false;
+    let leavingCallScreen = false;
     let suppressEndedUntil = 0;
     let registry = {};
     let registryCount = 0;
     const originalCallLayerDisplay = callLayer ? callLayer.style.getPropertyValue("display") : "";
     const originalCallLayerDisplayPriority = callLayer ? callLayer.style.getPropertyPriority("display") : "";
+
+    // True when this document owns a real call screen (Home / Chat AI page).
+    // On other pages the footer injects hidden stand-ins inside #footerCallStateHooks.
+    function isHomeHost() {
+        return !!(callLayer && !callLayer.closest("#footerCallStateHooks")
+            && !document.body.classList.contains("uai-non-home"));
+    }
+
+    // Popup mode = FAB / non-home pages: the call is only ever shown as the floating bar.
+    function isPopupMode() {
+        return document.body.classList.contains("uai-non-home")
+            || document.body.getAttribute("data-call-presentation") === "popup";
+    }
+
+    // ---- Touch lock: while a real call is live and shown as the floating bar, the rest of the
+    // app cannot be touched. Only the bar and the suggestion chips stay clickable.
+    // Voice actions still work because they use programmatic click()/postMessage, which a shield ignores.
+    const LOCK_Z = 2147483646;
+    let touchShield = null;
+
+    function ensureTouchLockStyle() {
+        if (document.getElementById("unifiedAiTouchLockStyle")) return;
+        const style = document.createElement("style");
+        style.id = "unifiedAiTouchLockStyle";
+        style.textContent =
+            "#unifiedAiTouchShield{position:fixed;inset:0;width:100vw;height:100vh;z-index:" + LOCK_Z + ";" +
+            "background:transparent;touch-action:none;-webkit-tap-highlight-color:transparent;cursor:not-allowed}" +
+            "#unifiedAiTouchShield[hidden]{display:none!important}" +
+            "body.uai-call-locked .fab-wrap,body.uai-call-locked .fab-overlay{pointer-events:none!important}" +
+            "#unifiedAiFloatingBar:not([hidden]):not(.is-minimized){display:flex!important;flex-direction:row!important;overflow:visible!important;width:max-content!important;" +
+            "min-width:min(340px,calc(100vw - 24px))!important;pointer-events:auto!important;z-index:2147483647!important}" +
+            "#unifiedAiFloatingBar:not(.is-minimized) #unifiedAiBarMicButton,#unifiedAiFloatingBar:not(.is-minimized) .unified-ai-bar-action{" +
+            "display:grid!important;visibility:visible!important;opacity:1!important;pointer-events:auto!important;flex-shrink:0!important}" +
+            "body.uai-call-locked #unifiedAiFloatingBar:not([hidden]){z-index:" + (LOCK_Z + 1) + "!important}" +
+            "body.uai-call-locked #unifiedAiSuggestions{z-index:" + (LOCK_Z + 1) + "!important}";
+        document.head.appendChild(style);
+    }
+
+    function setTouchLock(locked) {
+        ensureTouchLockStyle();
+        if (locked && !touchShield) {
+            touchShield = document.createElement("div");
+            touchShield.id = "unifiedAiTouchShield";
+            touchShield.setAttribute("aria-hidden", "true");
+            ["pointerdown", "click", "touchstart", "wheel", "contextmenu"].forEach(function (type) {
+                touchShield.addEventListener(type, function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }, { passive: false });
+            });
+            document.body.appendChild(touchShield);
+        }
+        if (touchShield) touchShield.hidden = !locked;
+        document.body.classList.toggle("uai-call-locked", !!locked);
+    }
 
     function normalizeText(value) {
         return String(value || "").replace(/\s+/g, " ").trim();
@@ -198,6 +254,14 @@
         return !!current && current.toLowerCase() === url.pathname.toLowerCase();
     }
 
+    function isCurrentPage(url) {
+        if (frameLayer.classList.contains("is-open") || isHomeHost()) return false;
+        const pageKey = function (path) {
+            return stripPath(path).replace(/(^|\/)index$/, "");
+        };
+        return pageKey(url.pathname) === pageKey(window.location.pathname);
+    }
+
     function clearPendingNavigation(success, result, error) {
         if (!pendingNavigation) return;
         const nav = pendingNavigation;
@@ -228,6 +292,15 @@
 
     function setCallPresentation(presentation) {
         if (presentation !== "full" && presentation !== "minimized") return;
+
+        // Popup mode (FAB / non-home pages): while a call is live it always stays a floating bar
+        if (isPopupMode() && isRealCallActive()) {
+            callPresentation = "minimized";
+            document.body.setAttribute("data-call-presentation", "popup");
+            if (callLayer) callLayer.style.setProperty("display", "none", "important");
+            return;
+        }
+
         if (presentation === "minimized" && !isRealCallActive()) return;
 
         callPresentation = presentation;
@@ -369,8 +442,16 @@
                 });
             return value.slice(0, limit);
         };
+        const MODALS = ".modal-overlay, .rs-modal-overlay, .video-overlay";
         const isVisible = function (element) {
-            if (element.closest("[hidden], [aria-hidden='true'], #unifiedAiFloatingBar, #unifiedAiTestPanel, #unifiedAiTestLauncher, #callLayer, #endedLayer, .idle-layer, .modal-overlay, .rs-modal-overlay, .video-overlay, #autoStartLoader")) return false;
+            if (element.closest("[hidden], [aria-hidden='true'], #unifiedAiFloatingBar, #unifiedAiTestPanel, #unifiedAiTestLauncher, #callLayer, #endedLayer, .idle-layer, #autoStartLoader, #footerCallStateHooks")) return false;
+            const modal = element.closest(MODALS);
+            if (modal) {
+                if (isHomeHost()) return false;
+                const modalStyle = window.getComputedStyle(modal);
+                if (modalStyle.display === "none" || modalStyle.visibility === "hidden"
+                    || modalStyle.pointerEvents === "none" || Number(modalStyle.opacity) === 0) return false;
+            }
             const style = window.getComputedStyle(element);
             if (style.visibility === "hidden") return false;
             if (isHiddenOnlyByCallOverlay(element)) return true;
@@ -392,6 +473,7 @@
         ))
             .filter(function (element) { return element.id !== "mobileNotificationTrigger"; })
             .filter(isVisible)
+            .sort(function (a, b) { return (b.closest(MODALS) ? 1 : 0) - (a.closest(MODALS) ? 1 : 0); })
             .slice(0, 150);
 
         const actions = actionElements
@@ -437,7 +519,9 @@
             .filter(function (element) {
                 const identity = [element.id, element.name, element.getAttribute("aria-label"), element.getAttribute("placeholder")].join(" ");
                 return isVisible(element)
-                    && !/bed|patient|room|uhid|user|token|password|doctor|physician|provider|name|email|phone|mobile|address|birth|age/i.test(identity)
+                    && (/remark|instruction|comment|description|message|note/i.test(identity)
+                        && !/uhid|token|password|email|phone|mobile/i.test(identity)
+                        || !/bed|patient|room|uhid|user|token|password|doctor|physician|provider|name|email|phone|mobile|address|birth|age/i.test(identity))
                     && !element.closest(".patient-info, .patient-details, [data-patient-info]");
             })
             .slice(0, 50)
@@ -473,7 +557,7 @@
             .filter(Boolean);
 
         const context = {
-            route: "/Home/Index",
+            route: isHomeHost() ? "/Home/Index" : window.location.pathname,
             title: document.title,
             headings: Array.from(document.querySelectorAll("#pageContent h1, #pageContent h2, #pageContent h3"))
                 .filter(function (heading) {
@@ -588,7 +672,14 @@
         const state = document.body.getAttribute("data-state");
         const realCall = state === "connecting" || state === "connected";
         const activeCall = simulatedSession || voiceNavSession || realCall;
+
+        // Popup mode: a live call is always shown as the floating bar
+        if (realCall && isPopupMode() && callPresentation !== "minimized") {
+            setCallPresentation("minimized");
+        }
+
         syncScreenWakeLock(realCall);
+        setTouchLock(realCall && callPresentation === "minimized");
         if (!activeCall) lastSentContext = "";
         if (floatingBar) {
             floatingBar.hidden = !activeCall || realCall && callPresentation !== "minimized";
@@ -616,13 +707,44 @@
         if (state === "connected" && !simulatedSession) sendCurrentPageContext(false);
     }
 
-    function showChat() {
+    // Internal: close the module iframe and restore the base presentation.
+    function closeFrame() {
         frameLayer.classList.remove("is-open");
         frameLayer.setAttribute("aria-hidden", "true");
         resetModuleFrame();
         setCallPresentation("full");
         updateFloatingBar();
         notifyTestContextChanged();
+    }
+
+    // Non-home page: the live call belongs to this document, so end it, go Home and auto-start there.
+    function openChatScreen() {
+        openingChat = true;
+        if (typeof window.endChat === "function") window.endChat();
+        try { sessionStorage.setItem("autoStartCall", "1"); } catch (e) { }
+        if (typeof window.setState === "function") window.setState("idle");
+        else document.body.setAttribute("data-state", "idle");
+        document.body.removeAttribute("data-call-presentation");
+        if (window.BedContext && typeof window.BedContext.go === "function") window.BedContext.go("Home");
+        else window.location.href = "/Home";
+    }
+
+    // Public entry for the Chat button, the avatar/return button and the module's "show chat" message.
+    function showChat() {
+        if (frameLayer.classList.contains("is-open")) {
+            closeFrame();
+            return;
+        }
+        if (isPopupMode() && isRealCallActive()) {
+            if (isHomeHost()) {
+                document.body.removeAttribute("data-call-presentation");
+                callPresentation = "full";
+                if (callLayer) callLayer.style.removeProperty("display");
+                updateFloatingBar();
+            }
+            return;
+        }
+        closeFrame();
     }
 
     function showHomePreservingCall() {
@@ -632,6 +754,46 @@
         setCallPresentation(isRealCallActive() ? "minimized" : "full");
         updateFloatingBar();
         notifyTestContextChanged();
+    }
+
+    function goToChat() {
+        if (!frameLayer.classList.contains("is-open") && isRealCallActive() && !isHomeHost()) {
+            openChatScreen();
+            return;
+        }
+        showChat();
+    }
+
+    function currentFrameUrl() {
+        if (!frameLayer.classList.contains("is-open") || isBlankFrame()) return "";
+        try {
+            const url = new URL(frame.contentWindow.location.href);
+            url.searchParams.delete("Unified");
+            url.searchParams.delete("UnifiedAI");
+            return url.toString();
+        } catch (error) {
+            return "";
+        }
+    }
+
+    function endOnCurrentScreen() {
+        if (leavingCallScreen) return;
+        suppressEndedUntil = Date.now() + 4000;
+        const stayUrl = currentFrameUrl();
+        if (typeof window.setState === "function") window.setState("idle");
+        else document.body.setAttribute("data-state", "idle");
+        if (stayUrl) {
+            leavingCallScreen = true;
+            window.location.assign(stayUrl);
+            return;
+        }
+        closeFrame();
+    }
+
+    function isOnCallScreen() {
+        return isHomeHost() && !document.body.classList.contains("uai-non-home")
+            && callPresentation !== "minimized" && !frameLayer.classList.contains("is-open")
+            && Date.now() >= suppressEndedUntil;
     }
 
     const recentRequests = new Map();
@@ -709,7 +871,8 @@
             return false;
         }
         const targetUrl = withContext(new URL(route, window.location.origin));
-        if (action && (action.action === "navigate" || action.action === "food.intent") && alreadyOnPath(targetUrl)) {
+        if (action && (action.action === "navigate" || action.action === "food.intent")
+            && (alreadyOnPath(targetUrl) || isCurrentPage(targetUrl))) {
             reportResult(action, true, { target: target, path: targetUrl.pathname, already: true });
             return true;
         }
@@ -753,7 +916,7 @@
 
         targetUrl.searchParams.delete("BedInfo");
         withContext(targetUrl);
-        if (navAction && alreadyOnPath(targetUrl)) {
+        if (navAction && (alreadyOnPath(targetUrl) || isCurrentPage(targetUrl))) {
             reportResult(navAction, true, { target: routeTargetForPath(targetUrl.pathname), path: targetUrl.pathname, already: true });
             return { path: targetUrl.pathname, deferred: true };
         }
@@ -1153,22 +1316,13 @@
                 endVoiceNavSession();
                 return;
             }
-            suppressEndedUntil = Date.now() + 4000;
             if (typeof window.endChat === "function") window.endChat();
-            if (typeof window.setState === "function") {
-                window.setState("idle");
-            } else {
-                document.body.setAttribute("data-state", "idle");
-            }
-            showChat();
+            endOnCurrentScreen();
         });
     }
 
-    if (barChatButton) barChatButton.addEventListener("click", showChat);
-    if (returnButton) returnButton.addEventListener("click", function () {
-        if (Date.now() < suppressReturnClickUntil) return;
-        showChat();
-    });
+    if (barChatButton) barChatButton.addEventListener("click", goToChat);
+
     if (barMicButton) {
         barMicButton.addEventListener("click", function (event) {
             event.stopPropagation();
@@ -1178,41 +1332,124 @@
         });
     }
 
-    if (floatingBar && returnButton) {
-        returnButton.addEventListener("pointerdown", function (event) {
+    if (floatingBar) {
+        let barDrag = null;
+
+        floatingBar.addEventListener("pointerdown", function (event) {
             if (!event.isPrimary || event.button !== 0) return;
+            if (event.target.closest("#unifiedAiBarMicButton, #unifiedAiBarChatButton, #unifiedAiBarEndButton")) return;
+
             const rect = floatingBar.getBoundingClientRect();
-            dragState = {
+            barDrag = {
                 pointerId: event.pointerId,
                 startX: event.clientX,
                 startY: event.clientY,
                 left: rect.left,
                 top: rect.top,
-                moved: false
+                nextLeft: rect.left,
+                nextTop: rect.top,
+                moved: false,
+                captured: false,
+                raf: null
             };
-            returnButton.setPointerCapture(event.pointerId);
+        }, true);
+
+        floatingBar.addEventListener("pointermove", function (event) {
+            if (!barDrag || barDrag.pointerId !== event.pointerId) return;
+            const dx = event.clientX - barDrag.startX;
+            const dy = event.clientY - barDrag.startY;
+            if (!barDrag.moved && Math.hypot(dx, dy) < 5) return;
+
+            if (!barDrag.moved) {
+                barDrag.moved = true;
+                floatingBar.classList.add("is-dragging");
+                floatingBar.style.left = barDrag.left + "px";
+                floatingBar.style.top = barDrag.top + "px";
+                floatingBar.style.right = "auto";
+                floatingBar.style.bottom = "auto";
+                floatingBar.style.transform = "none";
+                floatingBar.style.transition = "none";
+                try {
+                    floatingBar.setPointerCapture(event.pointerId);
+                    barDrag.captured = true;
+                } catch (_) { }
+            }
+
+            const pad = 12;
+            const maxLeft = Math.max(pad, window.innerWidth - floatingBar.offsetWidth - pad);
+            const maxTop = Math.max(pad, window.innerHeight - floatingBar.offsetHeight - pad);
+            barDrag.nextLeft = Math.max(pad, Math.min(maxLeft, barDrag.left + dx));
+            barDrag.nextTop = Math.max(pad, Math.min(maxTop, barDrag.top + dy));
+
+            if (!barDrag.raf) {
+                barDrag.raf = requestAnimationFrame(function () {
+                    if (!barDrag) return;
+                    barDrag.raf = null;
+                    floatingBar.style.left = barDrag.nextLeft + "px";
+                    floatingBar.style.top = barDrag.nextTop + "px";
+                });
+            }
         });
-        returnButton.addEventListener("pointermove", function (event) {
-            if (!dragState || dragState.pointerId !== event.pointerId) return;
-            const dx = event.clientX - dragState.startX;
-            const dy = event.clientY - dragState.startY;
-            if (!dragState.moved && Math.abs(dx) + Math.abs(dy) < 8) return;
-            dragState.moved = true;
-            const maxLeft = Math.max(0, window.innerWidth - floatingBar.offsetWidth);
-            const maxTop = Math.max(0, window.innerHeight - floatingBar.offsetHeight);
-            floatingBar.style.left = Math.max(0, Math.min(maxLeft, dragState.left + dx)) + "px";
-            floatingBar.style.top = Math.max(0, Math.min(maxTop, dragState.top + dy)) + "px";
-            floatingBar.style.right = "auto";
-            floatingBar.style.bottom = "auto";
-            floatingBar.style.transform = "none";
-        });
-        const finishDrag = function (event) {
-            if (!dragState || dragState.pointerId !== event.pointerId) return;
-            if (dragState.moved) suppressReturnClickUntil = Date.now() + 350;
-            dragState = null;
+
+        const finishBarDrag = function (event) {
+            if (!barDrag || barDrag.pointerId !== event.pointerId) return;
+            if (barDrag.raf) {
+                cancelAnimationFrame(barDrag.raf);
+                barDrag.raf = null;
+            }
+            if (barDrag.captured) {
+                try {
+                    if (floatingBar.hasPointerCapture(event.pointerId)) {
+                        floatingBar.releasePointerCapture(event.pointerId);
+                    }
+                } catch (_) { }
+            }
+
+            const wasMoved = barDrag.moved;
+            floatingBar.classList.remove("is-dragging");
+            floatingBar.style.transition = "";
+            barDrag = null;
+
+            if (wasMoved) {
+                suppressReturnClickUntil = Date.now() + 350;
+            }
         };
-        returnButton.addEventListener("pointerup", finishDrag);
-        returnButton.addEventListener("pointercancel", finishDrag);
+
+        floatingBar.addEventListener("pointerup", finishBarDrag);
+        floatingBar.addEventListener("pointercancel", finishBarDrag);
+
+        floatingBar.addEventListener("click", function (event) {
+            if (event.target.closest("#unifiedAiBarMicButton, #unifiedAiBarChatButton, #unifiedAiBarEndButton")) return;
+
+            if (Date.now() < suppressReturnClickUntil) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+
+            if (floatingBar.classList.contains("is-minimized")) {
+                event.preventDefault();
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent("unified-ai:expand-bar"));
+            }
+        }, true);
+    }
+
+    if (returnButton) {
+        returnButton.addEventListener("click", function (event) {
+            if (Date.now() < suppressReturnClickUntil) {
+                event.preventDefault();
+                event.stopPropagation();
+                return;
+            }
+            if (floatingBar && floatingBar.classList.contains("is-minimized")) {
+                event.preventDefault();
+                event.stopPropagation();
+                window.dispatchEvent(new CustomEvent("unified-ai:expand-bar"));
+                return;
+            }
+            showChat();
+        });
     }
 
     document.addEventListener("visibilitychange", function () {
@@ -1276,10 +1513,18 @@
         loadFrameUrl(targetUrl, routeTargetForPath(targetUrl.pathname), null);
     }, true);
 
+    ["transitionend", "animationend"].forEach(function (type) {
+        document.addEventListener(type, function (event) {
+            if (!event.target.closest || !event.target.closest(".modal-overlay, .rs-modal-overlay")) return;
+            sendCurrentPageContext(false);
+            notifyTestContextChanged();
+        }, true);
+    });
+
     function endVoiceNavSession() {
         if (!voiceNavSession) return false;
         voiceNavSession = false;
-        showChat();
+        closeFrame();
         updateFloatingBar();
         notifyTestContextChanged();
         window.dispatchEvent(new CustomEvent("unified-ai:voice-nav-ended"));
@@ -1302,6 +1547,10 @@
         window.navigation.addEventListener("navigate", function (event) {
             if (!isRealCallActive() || !event.cancelable || event.hashChange || event.formData) return;
             if (event.downloadRequest !== null && event.downloadRequest !== undefined) return;
+            if (event.navigationType === "reload") {
+                event.preventDefault();
+                return;
+            }
             if (event.navigationType !== "push" && event.navigationType !== "replace") return;
             if (event.destination.sameDocument) return;
             let destination;
@@ -1349,7 +1598,7 @@
         endLocalTestSession: function () {
             if (!isLocalTestMode) return false;
             simulatedSession = false;
-            showChat();
+            closeFrame();
             updateFloatingBar();
             notifyTestContextChanged();
             return true;
@@ -1364,19 +1613,13 @@
         const state = document.body.getAttribute("data-state");
         if (state === "connecting" || state === "connected") {
             simulatedSession = false;
+            openingChat = false;
+            leavingCallScreen = false;
             suppressEndedUntil = 0;
             if (voiceNavSession) endVoiceNavSession();
         } else if (state === "ended") {
-            if (Date.now() < suppressEndedUntil
-                || callPresentation === "minimized"
-                || frameLayer.classList.contains("is-open")) {
-                suppressEndedUntil = Date.now() + 4000;
-                if (typeof window.setState === "function") {
-                    window.setState("idle");
-                } else {
-                    document.body.setAttribute("data-state", "idle");
-                }
-                showChat();
+            if (!openingChat && !isOnCallScreen()) {
+                endOnCurrentScreen();
                 return;
             }
         } else if (state === "idle") {
@@ -1424,4 +1667,270 @@
             originalGo(page, extra);
         };
     }
+
+    (function initFloatingBarAutoMinimizeAndAura() {
+        const bar = document.getElementById("unifiedAiFloatingBar");
+        if (!bar) return;
+
+        const barTimerEl = document.getElementById("unifiedAiBarTimer");
+        const callTimerEl = document.getElementById("sessionTimer");
+        const COLLAPSE_DELAY_MS = 15000;
+        const VIEWPORT_PAD = 12;
+
+        let collapseTimer = null;
+        let timerInterval = null;
+        let elapsedSeconds = 0;
+        let wasHidden = bar.hidden;
+
+        function isCallScreenVisible() {
+            const state = document.body.getAttribute("data-state");
+            const presentation = document.body.getAttribute("data-call-presentation");
+            const isMinimized = presentation === "minimized" || presentation === "popup";
+            return (state === "connecting" || state === "connected" || state === "ended") && !isMinimized;
+        }
+
+        function createAuraElement() {
+            if (bar.querySelector(".uai-minimized-aura")) return;
+
+            const svgNs = "http://www.w3.org/2000/svg";
+            const aura = document.createElement("div");
+            aura.className = "uai-minimized-aura";
+            aura.setAttribute("aria-hidden", "true");
+
+            const svg = document.createElementNS(svgNs, "svg");
+            svg.setAttribute("viewBox", "0 0 118 118");
+
+            const outerCircle = document.createElementNS(svgNs, "circle");
+            outerCircle.setAttribute("class", "uai-aura-ring-outer");
+            outerCircle.setAttribute("cx", "59");
+            outerCircle.setAttribute("cy", "59");
+            outerCircle.setAttribute("r", "55");
+            outerCircle.setAttribute("fill", "none");
+            outerCircle.setAttribute("stroke", "rgba(46, 224, 210, 0.35)");
+            outerCircle.setAttribute("stroke-width", "1.25");
+
+            const innerCircle = document.createElementNS(svgNs, "circle");
+            innerCircle.setAttribute("class", "uai-aura-ring-inner");
+            innerCircle.setAttribute("cx", "59");
+            innerCircle.setAttribute("cy", "59");
+            innerCircle.setAttribute("r", "36.5");
+            innerCircle.setAttribute("fill", "none");
+            innerCircle.setAttribute("stroke", "rgba(0, 240, 255, 0.3)");
+            innerCircle.setAttribute("stroke-width", "1");
+
+            const raysGroup = document.createElementNS(svgNs, "g");
+            raysGroup.setAttribute("class", "uai-aura-rays");
+
+            const cx = 59;
+            const cy = 59;
+            const innerR = 37;
+            const rayCount = 40;
+            const lengths = [6, 13, 4.5, 16, 7.5, 11.5, 4, 14.5, 6.5, 10];
+
+            for (let i = 0; i < rayCount; i++) {
+                const angle = (i * 360 / rayCount) * (Math.PI / 180);
+                const len = lengths[i % lengths.length];
+                const width = (i % 4 === 0) ? "2.2" : (i % 2 === 0 ? "1.6" : "1.25");
+                const x1 = cx + Math.cos(angle) * innerR;
+                const y1 = cy + Math.sin(angle) * innerR;
+                const x2 = cx + Math.cos(angle) * (innerR + len);
+                const y2 = cy + Math.sin(angle) * (innerR + len);
+
+                const line = document.createElementNS(svgNs, "line");
+                line.setAttribute("x1", x1.toFixed(2));
+                line.setAttribute("y1", y1.toFixed(2));
+                line.setAttribute("x2", x2.toFixed(2));
+                line.setAttribute("y2", y2.toFixed(2));
+                line.setAttribute("stroke-width", width);
+                raysGroup.appendChild(line);
+            }
+
+            svg.appendChild(outerCircle);
+            svg.appendChild(innerCircle);
+            svg.appendChild(raysGroup);
+            aura.appendChild(svg);
+            bar.insertBefore(aura, bar.firstChild);
+        }
+
+        function getMaxExpandedWidth() {
+            const rootStyle = getComputedStyle(document.documentElement);
+            const cssMax = parseFloat(rootStyle.getPropertyValue("--uai-bar-max-width")) || 500;
+            return Math.min(cssMax, Math.max(240, window.innerWidth - VIEWPORT_PAD * 2));
+        }
+
+        function clampBarCoords(left, top, targetWidth, targetHeight) {
+            const rect = bar.getBoundingClientRect();
+            const w = targetWidth || rect.width;
+            const h = targetHeight || rect.height;
+            const maxLeft = Math.max(VIEWPORT_PAD, window.innerWidth - w - VIEWPORT_PAD);
+            const maxTop = Math.max(VIEWPORT_PAD, window.innerHeight - h - VIEWPORT_PAD);
+            return {
+                left: Math.min(Math.max(VIEWPORT_PAD, left), maxLeft),
+                top: Math.min(Math.max(VIEWPORT_PAD, top), maxTop)
+            };
+        }
+
+        function keepBarInsideViewport(targetWidth) {
+            if (!bar.style.left || !bar.style.top) return;
+            const rect = bar.getBoundingClientRect();
+            const clamped = clampBarCoords(
+                parseFloat(bar.style.left),
+                parseFloat(bar.style.top),
+                targetWidth || rect.width,
+                rect.height
+            );
+            bar.style.left = clamped.left + "px";
+            bar.style.top = clamped.top + "px";
+        }
+
+        function minimizeBar() {
+            if (bar.hidden || isCallScreenVisible() || bar.classList.contains("is-dragging")) return;
+            createAuraElement();
+            const rect = bar.getBoundingClientRect();
+            const minSize = window.innerWidth <= 480 ? 62 : 66;
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const clamped = clampBarCoords(centerX - minSize / 2, centerY - minSize / 2, minSize, minSize);
+            bar.style.left = clamped.left + "px";
+            bar.style.top = clamped.top + "px";
+            bar.style.right = "auto";
+            bar.style.bottom = "auto";
+            bar.style.transform = "none";
+            bar.classList.add("is-minimized");
+        }
+
+        function expandBar() {
+            bar.style.transition = "";
+            const rect = bar.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const estExpandedWidth = getMaxExpandedWidth();
+            const clamped = clampBarCoords(centerX - estExpandedWidth / 2, rect.top, estExpandedWidth, rect.height);
+            bar.style.left = clamped.left + "px";
+            bar.style.top = clamped.top + "px";
+            bar.style.right = "auto";
+            bar.style.bottom = "auto";
+            bar.style.transform = "none";
+            bar.classList.remove("is-minimized");
+            requestAnimationFrame(() => keepBarInsideViewport());
+            resetCollapseTimer();
+        }
+
+        function resetCollapseTimer() {
+            clearTimeout(collapseTimer);
+            if (!bar.hidden && !bar.classList.contains("is-minimized") && !isCallScreenVisible() && !bar.classList.contains("is-dragging")) {
+                collapseTimer = setTimeout(minimizeBar, COLLAPSE_DELAY_MS);
+            }
+        }
+
+        function formatDuration(totalSec) {
+            const mins = Math.floor(totalSec / 60);
+            const secs = totalSec % 60;
+            return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
+        }
+
+        function syncTimerDisplay() {
+            if (!barTimerEl) return;
+            if (callTimerEl && callTimerEl.textContent && callTimerEl.textContent.trim() !== "00:00") {
+                barTimerEl.textContent = callTimerEl.textContent.trim();
+                return;
+            }
+            barTimerEl.textContent = formatDuration(elapsedSeconds);
+        }
+
+        function startBarTimer() {
+            if (!barTimerEl) return;
+            barTimerEl.hidden = false;
+            syncTimerDisplay();
+            if (timerInterval) return;
+
+            timerInterval = setInterval(() => {
+                const state = document.body.getAttribute("data-state");
+                if (state !== "connecting" && state !== "connected") {
+                    stopBarTimer(state === "ended");
+                    return;
+                }
+                elapsedSeconds++;
+                syncTimerDisplay();
+            }, 1000);
+        }
+
+        function stopBarTimer(keepVisible) {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            if (!barTimerEl) return;
+            if (!keepVisible) {
+                elapsedSeconds = 0;
+                barTimerEl.textContent = "00:00";
+                barTimerEl.hidden = true;
+            } else {
+                barTimerEl.hidden = false;
+                syncTimerDisplay();
+            }
+        }
+
+        function evaluateTimerState() {
+            const state = document.body.getAttribute("data-state");
+            if (state === "connecting" || state === "connected") {
+                startBarTimer();
+            } else if (state === "ended") {
+                stopBarTimer(true);
+            } else {
+                stopBarTimer(false);
+            }
+            resetCollapseTimer();
+        }
+
+        window.addEventListener("unified-ai:expand-bar", expandBar);
+        bar.addEventListener("pointerdown", () => clearTimeout(collapseTimer), true);
+        bar.addEventListener("pointerup", () => {
+            requestAnimationFrame(() => keepBarInsideViewport());
+            resetCollapseTimer();
+        });
+        bar.addEventListener("mouseenter", () => clearTimeout(collapseTimer));
+        bar.addEventListener("mouseleave", resetCollapseTimer);
+        bar.addEventListener("transitionend", (e) => {
+            if (e.propertyName === "width" || e.propertyName === "max-width") {
+                keepBarInsideViewport();
+            }
+        });
+        window.addEventListener("resize", () => keepBarInsideViewport());
+
+        new MutationObserver(() => {
+            if (bar.hidden === wasHidden) return;
+            wasHidden = bar.hidden;
+            if (!bar.hidden) {
+                expandBar();
+            } else {
+                clearTimeout(collapseTimer);
+                bar.classList.remove("is-minimized");
+                bar.classList.remove("is-dragging");
+            }
+        }).observe(bar, { attributes: true, attributeFilter: ["hidden"] });
+
+        function attachBodyObserver() {
+            if (!document.body) return;
+            new MutationObserver((mutations) => {
+                for (let i = 0; i < mutations.length; i++) {
+                    const attr = mutations[i].attributeName;
+                    if (attr === "data-state" || attr === "data-call-presentation") {
+                        evaluateTimerState();
+                    }
+                }
+            }).observe(document.body, { attributes: true });
+        }
+
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", () => {
+                attachBodyObserver();
+                evaluateTimerState();
+            }, { once: true });
+        } else {
+            attachBodyObserver();
+            evaluateTimerState();
+        }
+
+        if (!bar.hidden) resetCollapseTimer();
+    })();
 })();

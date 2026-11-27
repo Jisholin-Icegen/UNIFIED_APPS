@@ -7,6 +7,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
+using System.Runtime.CompilerServices;
 using Dial50_MVC_Core.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,7 +22,18 @@ namespace Dial50_MVC_Core.Controllers
     public class AiBridgeController : ControllerBase, IAsyncActionFilter
     {
         private const int MaxFoods = 60;
-        private const int ScreenSettleDelayMs = 0;
+        private const int DeviceReconnectWaitMs = 5000;
+        private const int StepWaitMs = 5000;
+        private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
+
+        private static readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> SendLocks = new();
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> IntentLocks = new(StringComparer.Ordinal);
+
+        private static readonly string[] IntentProperties =
+        {
+            "department", "category", "items", "remarks", "steps", "selects",
+            "submit", "place_order", "submit_label", "close_modal", "intents"
+        };
 
         private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, WebSocket>> AgentSockets = new(StringComparer.Ordinal);
         private static readonly ConcurrentDictionary<string, ConcurrentDictionary<string, WebSocket>> DeviceSockets = new(StringComparer.Ordinal);
@@ -128,6 +141,7 @@ namespace Dial50_MVC_Core.Controllers
         public async Task BedWebSocket(
             string bedId,
             [FromQuery(Name = "api_key")] string? apiKey,
+            [FromQuery(Name = "tenant_id")] string? tenantId,
             CancellationToken cancellationToken)
         {
             if (!HttpContext.WebSockets.IsWebSocketRequest)
@@ -135,7 +149,7 @@ namespace Dial50_MVC_Core.Controllers
                 HttpContext.Response.StatusCode = 400;
                 return;
             }
-            if (!IsValidWebSocketApiKey(apiKey))
+            if (!IsValidWebSocketApiKey(apiKey) || !IsValidWebSocketTenantId(tenantId))
             {
                 HttpContext.Response.StatusCode = 401;
                 return;
@@ -146,7 +160,10 @@ namespace Dial50_MVC_Core.Controllers
                 return;
             }
 
-            var ws = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            var ws = await HttpContext.WebSockets.AcceptWebSocketAsync(new WebSocketAcceptContext
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(20)
+            });
             using (ws)
             {
                 var connId = Guid.NewGuid().ToString("N");
@@ -170,73 +187,107 @@ namespace Dial50_MVC_Core.Controllers
                         }), cancellationToken);
                     }
 
-                    await ReceiveLoopAsync(ws, async text =>
+                    var queue = Channel.CreateBounded<string>(32);
+                    var worker = ProcessAgentMessagesAsync(ws, bedId, queue.Reader, cancellationToken);
+                    try
                     {
-                        using var doc = JsonDocument.Parse(text);
-                        var root = doc.RootElement;
-                        var msgType = ReadString(root, "type");
-
-                        if (msgType == "ping")
+                        await ReceiveLoopAsync(ws, async text =>
                         {
-                            await SendTextAsync(ws, "{\"type\":\"pong\"}", cancellationToken);
-                            return;
-                        }
-
-                        AiBridgeSession? session = null;
-                        var reqSessionId = ReadString(root, "session_id");
-                        if (AiBridgeService.IsValidSessionId(reqSessionId))
-                        {
-                            var candidate = _bridge.Find(reqSessionId.Trim());
-                            if (candidate != null && candidate.SubscriberCount > 0 && (string.IsNullOrWhiteSpace(candidate.BedId) || candidate.BedId == bedId))
+                            using (var doc = JsonDocument.Parse(text))
                             {
-                                session = candidate;
+                                if (ReadString(doc.RootElement, "type") == "ping")
+                                {
+                                    await SendTextAsync(ws, "{\"type\":\"pong\"}", cancellationToken);
+                                    return;
+                                }
                             }
-                        }
-                        session ??= ResolveBedSession(bedId);
-
-                        if (session == null)
-                        {
-                            await SendTextAsync(ws, JsonSerializer.Serialize(new Dictionary<string, object>
+                            if (!queue.Writer.TryWrite(text))
                             {
-                                ["type"] = "error",
-                                ["error"] = "No active device for bed_id " + bedId
-                            }), cancellationToken);
-                            return;
-                        }
-
-                        if (msgType == "get_screen")
-                        {
-                            await SendTextAsync(ws, BuildScreenPushEnvelope(session, true), cancellationToken);
-                            return;
-                        }
-
-                        // Single unified handler over WebSocket too: supports high-level intent directly!
-                        if (msgType == "run_intent"
-                            || root.TryGetProperty("department", out _)
-                            || root.TryGetProperty("category", out _)
-                            || root.TryGetProperty("items", out _)
-                            || root.TryGetProperty("remarks", out _))
-                        {
-                            var intentReq = JsonSerializer.Deserialize<AiRunIntentPost>(root.GetRawText()) ?? new AiRunIntentPost();
-                            intentReq.BedId = bedId;
-                            var result = await ExecuteIntentCoreAsync(session, intentReq, cancellationToken);
-                            result["type"] = "intent_response";
-                            await SendTextAsync(ws, JsonSerializer.Serialize(result), cancellationToken);
-                            return;
-                        }
-
-                        if (msgType == "actions" || root.TryGetProperty("actions", out _) || root.TryGetProperty("suggestions", out _))
-                        {
-                            var responseJson = await ExecuteWsActionsAsync(session, root, cancellationToken);
-                            await SendTextAsync(ws, responseJson, cancellationToken);
-                        }
-                    }, cancellationToken);
+                                await SendErrorAsync(ws, "Too many pending messages. Wait for a response before sending more.", cancellationToken);
+                            }
+                        }, cancellationToken);
+                    }
+                    finally
+                    {
+                        queue.Writer.TryComplete();
+                        await worker;
+                    }
                 }
                 finally
                 {
                     bucket.TryRemove(connId, out _);
                 }
             }
+        }
+
+        private async Task ProcessAgentMessagesAsync(WebSocket ws, string bedId, ChannelReader<string> reader, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await foreach (var text in reader.ReadAllAsync(cancellationToken))
+                {
+                    try
+                    {
+                        await HandleAgentMessageAsync(ws, bedId, text, cancellationToken);
+                    }
+                    catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(ex, "AiBridge: failed handling agent message for bed {BedId}.", bedId);
+                        await TrySendErrorAsync(ws, ex, cancellationToken);
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+        }
+
+        private async Task HandleAgentMessageAsync(WebSocket ws, string bedId, string text, CancellationToken cancellationToken)
+        {
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+            var msgType = ReadString(root, "type");
+
+            AiBridgeSession? session = null;
+            var reqSessionId = ReadString(root, "session_id");
+            if (AiBridgeService.IsValidSessionId(reqSessionId))
+            {
+                var candidate = _bridge.Find(reqSessionId.Trim());
+                if (candidate != null && candidate.SubscriberCount > 0 && (string.IsNullOrWhiteSpace(candidate.BedId) || candidate.BedId == bedId))
+                {
+                    session = candidate;
+                }
+            }
+            session ??= ResolveBedSession(bedId);
+
+            if (session == null)
+            {
+                await SendErrorAsync(ws, "No active device for bed_id " + bedId, cancellationToken);
+                return;
+            }
+
+            if (msgType == "get_screen")
+            {
+                await SendTextAsync(ws, BuildScreenPushEnvelope(session, true), cancellationToken);
+                return;
+            }
+
+            if (msgType == "run_intent" || IntentProperties.Any(name => root.TryGetProperty(name, out _)))
+            {
+                var intentReq = JsonSerializer.Deserialize<AiRunIntentPost>(root.GetRawText()) ?? new AiRunIntentPost();
+                intentReq.BedId = bedId;
+                var result = await ExecuteIntentRequestAsync(session, intentReq, cancellationToken);
+                result["type"] = "intent_response";
+                await SendTextAsync(ws, JsonSerializer.Serialize(result), cancellationToken);
+                return;
+            }
+
+            if (msgType == "actions" || root.TryGetProperty("actions", out _) || root.TryGetProperty("suggestions", out _))
+            {
+                var responseJson = await ExecuteWsActionsAsync(session, root, cancellationToken);
+                await SendTextAsync(ws, responseJson, cancellationToken);
+                return;
+            }
+
+            await SendErrorAsync(ws, "Unrecognized message.", cancellationToken);
         }
 
         [HttpGet("sessions/{sessionId}/ws")]
@@ -264,7 +315,10 @@ namespace Dial50_MVC_Core.Controllers
                 return;
             }
 
-            var ws = await HttpContext.WebSockets.AcceptWebSocketAsync();
+            var ws = await HttpContext.WebSockets.AcceptWebSocketAsync(new WebSocketAcceptContext
+            {
+                KeepAliveInterval = TimeSpan.FromSeconds(20)
+            });
             using (ws)
             {
                 var connId = Guid.NewGuid().ToString("N");
@@ -441,7 +495,6 @@ namespace Dial50_MVC_Core.Controllers
             return await ActionsForAsync(session, body, cancellationToken);
         }
 
-        // SINGLE UNIFIED API FOR TESTING & AI EXECUTION (ZERO ARTIFICIAL DELAY)
         [HttpPost("run-intent")]
         [RequestSizeLimit(65536)]
         public async Task<IActionResult> RunIntent([FromBody] AiRunIntentPost? body, CancellationToken cancellationToken)
@@ -456,8 +509,88 @@ namespace Dial50_MVC_Core.Controllers
             if (session == null)
                 return NotFound(new Dictionary<string, object> { ["error"] = "No active session found for bed_id " + body.BedId });
 
-            var result = await ExecuteIntentCoreAsync(session, body, cancellationToken);
+            if (body.Intents != null && body.Intents.Count == 0)
+                return BadRequest(new Dictionary<string, object> { ["error"] = "intents must contain at least one intent." });
+
+            if (body.Intents != null && body.Intents.Count > 20)
+                return BadRequest(new Dictionary<string, object> { ["error"] = "A maximum of 20 intents is allowed per request." });
+
+            var result = await ExecuteIntentRequestAsync(session, body, cancellationToken);
             return Ok(result);
+        }
+
+        private async Task<Dictionary<string, object>> ExecuteIntentRequestAsync(
+            AiBridgeSession session,
+            AiRunIntentPost request,
+            CancellationToken cancellationToken)
+        {
+            var gate = IntentLocks.GetOrAdd(session.SessionId, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (request.Intents == null)
+                    return await ExecuteIntentCoreAsync(session, request, cancellationToken);
+
+                if (request.Intents.Count == 0)
+                {
+                    return new Dictionary<string, object>
+                    {
+                        ["ok"] = false,
+                        ["error"] = "intents must contain at least one intent."
+                    };
+                }
+
+                if (request.Intents.Count > 20)
+                {
+                    return new Dictionary<string, object>
+                    {
+                        ["ok"] = false,
+                        ["error"] = "A maximum of 20 intents is allowed per request."
+                    };
+                }
+
+                var results = new List<Dictionary<string, object>>();
+                for (var i = 0; i < request.Intents.Count; i++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var intent = request.Intents[i];
+                    if (intent == null)
+                    {
+                        results.Add(new Dictionary<string, object>
+                        {
+                            ["intent_index"] = i,
+                            ["ok"] = false,
+                            ["error"] = "Intent cannot be null."
+                        });
+                        break;
+                    }
+
+                    intent.BedId = session.BedId;
+                    intent.Intents = null;
+                    var result = await ExecuteIntentCoreAsync(session, intent, cancellationToken);
+                    result["intent_index"] = i;
+                    result["department"] = intent.Department ?? "";
+                    results.Add(result);
+
+                    if (!result.TryGetValue("ok", out var okValue) || okValue is not true)
+                        break;
+                }
+
+                return new Dictionary<string, object>
+                {
+                    ["ok"] = results.Count == request.Intents.Count
+                        && results.All(x => x.TryGetValue("ok", out var value) && value is true),
+                    ["bed_id"] = session.BedId,
+                    ["total_intents"] = request.Intents.Count,
+                    ["completed_intents"] = results.Count,
+                    ["stopped_on_failure"] = results.Count < request.Intents.Count,
+                    ["results"] = results
+                };
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         private async Task<Dictionary<string, object>> ExecuteIntentCoreAsync(
@@ -496,8 +629,15 @@ namespace Dial50_MVC_Core.Controllers
                     cancellationToken));
                 await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(1500), cancellationToken);
             }
-            // 1. Navigate to Department dynamically from live screen
-            if (!string.IsNullOrWhiteSpace(body.Department))
+            var steps = body.Steps?.Where(s => !string.IsNullOrWhiteSpace(s)).ToList() ?? new List<string>();
+
+            var startScreen = _bridge.GetSnapshot(session).ScreenJson;
+            var categoryOnScreen = !string.IsNullOrWhiteSpace(body.Category)
+                && FindDynamicRouteOrAction(startScreen, NormalizeKey(body.Category)) != null;
+
+            if (!string.IsNullOrWhiteSpace(body.Department)
+                && !categoryOnScreen
+                && !IsLaterTargetVisible(startScreen, steps, 0, body.Items))
             {
                 var deptMatch = await WaitForScreenValueAsync(
                     session,
@@ -518,7 +658,7 @@ namespace Dial50_MVC_Core.Controllers
                 }
 
                 var sameRoute = !string.IsNullOrEmpty(deptMatch.Value.Route)
-                    && string.Equals(NormalizeRouteKey(session.Route), NormalizeRouteKey(deptMatch.Value.Route), StringComparison.OrdinalIgnoreCase);
+                    && PageKey(session.Route) == PageKey(deptMatch.Value.Route);
 
                 if (!sameRoute)
                 {
@@ -528,46 +668,46 @@ namespace Dial50_MVC_Core.Controllers
                         : new Dictionary<string, object> { ["action"] = "ui.click", ["targetId"] = deptMatch.Value.TargetId!, ["label"] = deptMatch.Value.Label };
 
                     executed.Add(await DispatchAndWaitAsync(session, navPayload, 1500, cancellationToken));
-                    await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(ScreenSettleDelayMs), cancellationToken);
+                    await WaitForDepartmentAsync(session, deptMatch.Value.Route, prevVer, cancellationToken);
                 }
             }
 
-            // 2. Walk intermediate sub-steps (e.g. ["Food Ordering", "For the Patient", "Order Now"])
-            if (body.Steps != null)
+            for (var i = 0; i < steps.Count; i++)
             {
-                foreach (var step in body.Steps.Where(s => !string.IsNullOrWhiteSpace(s)))
+                var step = steps[i];
+                var next = i + 1;
+                var wantStep = NormalizeKey(step);
+                var stepMatch = await WaitForScreenValueAsync(
+                    session,
+                    s => FindDynamicRouteOrAction(s, wantStep),
+                    StepWaitMs,
+                    cancellationToken,
+                    stopEarlyWhen: s => IsLaterTargetVisible(s, steps, next, body.Items));
+
+                if (stepMatch == null)
                 {
-                    var wantStep = NormalizeKey(step);
-                    var stepMatch = await WaitForScreenValueAsync(
-                        session,
-                        s => FindDynamicRouteOrAction(s, wantStep),
-                        2500,
-                        cancellationToken);
+                    if (IsLaterTargetVisible(_bridge.GetSnapshot(session).ScreenJson, steps, next, body.Items)) continue;
 
-                    if (stepMatch == null)
+                    return new Dictionary<string, object>
                     {
-                        return new Dictionary<string, object>
-                        {
-                            ["ok"] = false,
-                            ["error"] = $"Step '{step}' not found on current screen.",
-                            ["route"] = session.Route,
-                            ["elapsed_ms"] = swTotal.ElapsedMilliseconds,
-                            ["executed"] = executed,
-                            ["available_options"] = ListAllAvailable(_bridge.GetSnapshot(session).ScreenJson)
-                        };
-                    }
-
-                    var prevVer = _bridge.GetScreenVersion(session);
-                    var stepPayload = !string.IsNullOrEmpty(stepMatch.Value.TargetId)
-                        ? new Dictionary<string, object> { ["action"] = "ui.click", ["targetId"] = stepMatch.Value.TargetId, ["label"] = stepMatch.Value.Label }
-                        : new Dictionary<string, object> { ["action"] = "navigate", ["path"] = stepMatch.Value.Route! };
-
-                    executed.Add(await DispatchAndWaitAsync(session, stepPayload, 1500, cancellationToken));
-                    await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(2500), cancellationToken);
+                        ["ok"] = false,
+                        ["error"] = $"Step '{step}' not found on current screen.",
+                        ["route"] = session.Route,
+                        ["elapsed_ms"] = swTotal.ElapsedMilliseconds,
+                        ["executed"] = executed,
+                        ["available_options"] = ListAllAvailable(_bridge.GetSnapshot(session).ScreenJson)
+                    };
                 }
+
+                var prevVer = _bridge.GetScreenVersion(session);
+                var stepPayload = !string.IsNullOrEmpty(stepMatch.Value.TargetId)
+                    ? new Dictionary<string, object> { ["action"] = "ui.click", ["targetId"] = stepMatch.Value.TargetId, ["label"] = stepMatch.Value.Label }
+                    : new Dictionary<string, object> { ["action"] = "navigate", ["path"] = stepMatch.Value.Route! };
+
+                executed.Add(await DispatchAndWaitAsync(session, stepPayload, 1500, cancellationToken));
+                await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(2500), cancellationToken);
             }
 
-            // 3. Click Category dynamically
             if (!string.IsNullOrWhiteSpace(body.Category))
             {
                 var wantCat = NormalizeKey(body.Category);
@@ -604,7 +744,6 @@ namespace Dial50_MVC_Core.Controllers
                 await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(2000), cancellationToken);
             }
 
-            // 4. Select dropdowns if provided
             if (body.Selects != null)
             {
                 foreach (var sel in body.Selects)
@@ -643,16 +782,12 @@ namespace Dial50_MVC_Core.Controllers
                 }
             }
 
-            // 5. Add food/menu items:
-            //    First waits until the menu AJAX finishes rendering food cards (or finds the item directly).
-            //    If menu cards rendered but the item is under "Browse other meal menus", opens it automatically!
             if (body.Items != null)
             {
                 foreach (var item in body.Items.Where(i => !string.IsNullOrWhiteSpace(i.Name)))
                 {
                     var wantItem = NormalizeKey(item.Name!);
 
-                    // Wait until either the target food appears OR any food cards finish loading via AJAX
                     var foodMatch = await WaitForScreenValueAsync(
                         session,
                         s => ResolveDynamicFoodAction(s, wantItem),
@@ -660,7 +795,6 @@ namespace Dial50_MVC_Core.Controllers
                         cancellationToken,
                         stopEarlyWhen: s => HasAnyFoodCards(s));
 
-                    // If menu loaded but item isn't in the active meal section, expand "Browse other meal menus"
                     if (foodMatch == null)
                     {
                         var browseOpt = FindDynamicRouteOrAction(_bridge.GetSnapshot(session).ScreenJson, "browse other meal menus");
@@ -726,14 +860,22 @@ namespace Dial50_MVC_Core.Controllers
                 }
             }
 
-            // 6. Fill remarks on current screen
+            var submitting = body.Submit == true || body.PlaceOrder == true || !string.IsNullOrWhiteSpace(body.SubmitLabel);
+            var reviewOpened = false;
+
             if (!string.IsNullOrWhiteSpace(body.Remarks))
             {
+                if (submitting && ResolveRemarksField(_bridge.GetSnapshot(session).ScreenJson, body.FieldTarget) == null)
+                {
+                    reviewOpened = await OpenReviewScreenAsync(session, body.SubmitLabel, executed, cancellationToken);
+                }
+
                 var fieldId = await WaitForScreenRefAsync(
                     session,
-                    s => ResolveFirstOrMatchingField(s, body.FieldTarget),
+                    s => ResolveRemarksField(s, body.FieldTarget),
                     1500,
-                    cancellationToken);
+                    cancellationToken)
+                    ?? ResolveFirstOrMatchingField(_bridge.GetSnapshot(session).ScreenJson, body.FieldTarget);
 
                 if (string.IsNullOrEmpty(fieldId))
                 {
@@ -759,31 +901,17 @@ namespace Dial50_MVC_Core.Controllers
                     cancellationToken));
             }
 
-            // 7. Submit / Review & Place Order flow
-            if (body.Submit == true || body.PlaceOrder == true || !string.IsNullOrWhiteSpace(body.SubmitLabel))
+            if (submitting)
             {
-                var reviewOpt = FindDynamicRouteOrAction(_bridge.GetSnapshot(session).ScreenJson, "review order");
-                if (reviewOpt != null && !string.IsNullOrEmpty(reviewOpt.Value.TargetId))
+                if (!reviewOpened)
                 {
-                    var prevVer = _bridge.GetScreenVersion(session);
-                    executed.Add(await DispatchAndWaitAsync(
-                        session,
-                        new Dictionary<string, object>
-                        {
-                            ["action"] = "ui.click",
-                            ["targetId"] = reviewOpt.Value.TargetId,
-                            ["label"] = reviewOpt.Value.Label
-                        },
-                        1500,
-                        cancellationToken));
-                    await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(2500), cancellationToken);
+                    await OpenReviewScreenAsync(session, body.SubmitLabel, executed, cancellationToken);
                 }
 
-                // Wait until "Confirm Order (N items)" finishes hydrating (skips unhydrated "0 items")
                 var submitMatch = await WaitForScreenValueAsync(
                     session,
                     s => FindDynamicSubmitAction(s, body.SubmitLabel),
-                    3000,
+                    StepWaitMs,
                     cancellationToken);
 
                 if (submitMatch == null || string.IsNullOrEmpty(submitMatch.Value.TargetId))
@@ -825,7 +953,86 @@ namespace Dial50_MVC_Core.Controllers
             };
         }
 
-        // Event-driven wait: wakes up immediately on every screen update from the browser (0ms artificial delay)
+        private async Task<bool> OpenReviewScreenAsync(
+            AiBridgeSession session,
+            string? submitLabel,
+            List<Dictionary<string, object>> executed,
+            CancellationToken cancellationToken)
+        {
+            await WaitForScreenValueAsync(
+                session,
+                s => FindDynamicRouteOrAction(s, "review order") ?? FindDynamicSubmitAction(s, submitLabel),
+                StepWaitMs,
+                cancellationToken);
+
+            var review = FindDynamicRouteOrAction(_bridge.GetSnapshot(session).ScreenJson, "review order");
+            if (review == null || string.IsNullOrEmpty(review.Value.TargetId)) return false;
+
+            var prevVer = _bridge.GetScreenVersion(session);
+            executed.Add(await DispatchAndWaitAsync(
+                session,
+                new Dictionary<string, object>
+                {
+                    ["action"] = "ui.click",
+                    ["targetId"] = review.Value.TargetId,
+                    ["label"] = review.Value.Label
+                },
+                1500,
+                cancellationToken));
+            await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(2500), cancellationToken);
+            return true;
+        }
+
+        private async Task WaitForDepartmentAsync(AiBridgeSession session, string? route, long previousVersion, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(route))
+            {
+                await _bridge.WaitForScreenUpdateAsync(session, previousVersion, TimeSpan.FromMilliseconds(2500), cancellationToken);
+                return;
+            }
+
+            var department = PageKey(route).Split('/')[0];
+            var timer = Stopwatch.StartNew();
+            while (PageKey(session.Route).Split('/')[0] != department && timer.ElapsedMilliseconds < StepWaitMs)
+            {
+                await _bridge.WaitForScreenUpdateAsync(session, _bridge.GetScreenVersion(session), TimeSpan.FromMilliseconds(250), cancellationToken);
+            }
+        }
+
+        private static string PageKey(string? route)
+        {
+            var parts = (route ?? "").Split('?')[0].ToLowerInvariant()
+                .Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
+            if (parts.Count > 1 && (parts[^1] == "index" || parts[^1] == parts[^2])) parts.RemoveAt(parts.Count - 1);
+            return string.Join("/", parts);
+        }
+
+        private static bool IsLaterTargetVisible(string screenJson, List<string> steps, int fromStep, List<AiDynamicItem>? items)
+        {
+            for (var i = fromStep; i < steps.Count; i++)
+            {
+                if (FindDynamicRouteOrAction(screenJson, NormalizeKey(steps[i])) != null) return true;
+            }
+            var firstItem = items?.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x.Name));
+            return firstItem != null && ResolveDynamicFoodAction(screenJson, NormalizeKey(firstItem.Name!)) != null;
+        }
+
+        private static string? ResolveRemarksField(string screenJson, string? explicitTarget)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitTarget)) return ResolveFirstOrMatchingField(screenJson, explicitTarget);
+
+            using var doc = JsonDocument.Parse(screenJson);
+            foreach (var f in ArrayItems(doc.RootElement, "fields"))
+            {
+                if (IsBlockedScreenField(f)) continue;
+                var targetId = ReadString(f, "targetId");
+                var text = ReadString(f, "label") + " " + ReadString(f, "placeholder");
+                if (targetId.Length > 0 && Regex.IsMatch(text, @"remark|note|instruction|comment|special", RegexOptions.IgnoreCase))
+                    return targetId;
+            }
+            return null;
+        }
+
         private async Task<T?> WaitForScreenValueAsync<T>(
             AiBridgeSession session,
             Func<string, T?> selector,
@@ -1012,6 +1219,13 @@ namespace Dial50_MVC_Core.Controllers
             var reqId = "intent-" + Guid.NewGuid().ToString("N")[..10];
             actionObj["request_id"] = reqId;
             var json = JsonSerializer.Serialize(actionObj);
+
+            var reconnect = Stopwatch.StartNew();
+            while (session.SubscriberCount == 0 && reconnect.ElapsedMilliseconds < DeviceReconnectWaitMs)
+            {
+                await Task.Delay(50, cancellationToken);
+            }
+
             var (startSeq, _, _) = _bridge.GetWatermarks(session);
             var deliveries = _bridge.Publish(session, "action", json);
 
@@ -1477,7 +1691,7 @@ namespace Dial50_MVC_Core.Controllers
                 {
                     try
                     {
-                        await SendTextAsync(pair.Value, text, cancellationToken);
+                        await SendTextAsync(pair.Value, text, CancellationToken.None);
                     }
                     catch (Exception ex)
                     {
@@ -1489,9 +1703,54 @@ namespace Dial50_MVC_Core.Controllers
 
         private static async Task SendTextAsync(WebSocket ws, string text, CancellationToken cancellationToken)
         {
-            if (ws.State != WebSocketState.Open) return;
             var bytes = Encoding.UTF8.GetBytes(text);
-            await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, cancellationToken);
+            var gate = SendLocks.GetValue(ws, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                if (ws.State != WebSocketState.Open) return;
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(SendTimeout);
+                await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, timeout.Token);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        private static Task SendErrorAsync(WebSocket ws, string error, CancellationToken cancellationToken)
+        {
+            return SendTextAsync(ws, JsonSerializer.Serialize(new Dictionary<string, object>
+            {
+                ["type"] = "error",
+                ["error"] = error
+            }), cancellationToken);
+        }
+
+        private async Task TrySendErrorAsync(WebSocket ws, Exception cause, CancellationToken cancellationToken)
+        {
+            var error = cause is JsonException
+                ? "Invalid JSON message. Send one JSON object per message."
+                : "The message could not be processed. Check the server log.";
+            try { await SendErrorAsync(ws, error, cancellationToken); }
+            catch (Exception ex) { _logger.LogWarning(ex, "AiBridge: could not send error to WebSocket."); }
+        }
+
+        private static async Task CloseSafelyAsync(WebSocket ws, WebSocketCloseStatus status)
+        {
+            var gate = SendLocks.GetValue(ws, _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync();
+            try
+            {
+                using var timeout = new CancellationTokenSource(SendTimeout);
+                await ws.CloseOutputAsync(status, "", timeout.Token);
+            }
+            catch { }
+            finally
+            {
+                gate.Release();
+            }
         }
 
         private async Task ReceiveLoopAsync(WebSocket ws, Func<string, Task> onMessage, CancellationToken cancellationToken)
@@ -1517,13 +1776,17 @@ namespace Dial50_MVC_Core.Controllers
 
                     if (result.MessageType == WebSocketMessageType.Close)
                     {
-                        try { await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None); } catch { }
+                        _logger.LogInformation(
+                            "AiBridge: WebSocket close received. Status: {Status}; Description: {Description}.",
+                            result.CloseStatus,
+                            result.CloseStatusDescription);
+                        await CloseSafelyAsync(ws, result.CloseStatus ?? WebSocketCloseStatus.NormalClosure);
                         return;
                     }
                     if (result.Count > 0) ms.Write(buffer, 0, result.Count);
                     if (ms.Length > 524288)
                     {
-                        try { await ws.CloseAsync(WebSocketCloseStatus.MessageTooBig, "", CancellationToken.None); } catch { }
+                        await CloseSafelyAsync(ws, WebSocketCloseStatus.MessageTooBig);
                         return;
                     }
                 }
@@ -1532,7 +1795,15 @@ namespace Dial50_MVC_Core.Controllers
                 if (result.MessageType == WebSocketMessageType.Text && ms.Length > 0)
                 {
                     var text = Encoding.UTF8.GetString(ms.GetBuffer(), 0, (int)ms.Length);
-                    await onMessage(text);
+                    try
+                    {
+                        await onMessage(text);
+                    }
+                    catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+                    {
+                        _logger.LogWarning(ex, "AiBridge: failed handling WebSocket message.");
+                        await TrySendErrorAsync(ws, ex, cancellationToken);
+                    }
                 }
             }
         }
@@ -1551,6 +1822,30 @@ namespace Dial50_MVC_Core.Controllers
             {
                 supplied = suppliedQueryKey?.Trim() ?? "";
             }
+            var a = Encoding.UTF8.GetBytes(expected);
+            var b = Encoding.UTF8.GetBytes(supplied);
+            return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
+        }
+
+        private bool IsValidWebSocketTenantId(string? suppliedQueryTenant)
+        {
+            var expected = _config["AiBridge:TenantId"]?.Trim();
+            if (string.IsNullOrWhiteSpace(expected)) return _env.IsDevelopment();
+
+            var supplied = "";
+            if (Request.Headers.TryGetValue("X-Tenant-ID", out var headerValues) && headerValues.Count == 1)
+            {
+                supplied = headerValues[0]?.Trim() ?? "";
+            }
+            if (string.IsNullOrEmpty(supplied))
+            {
+                supplied = suppliedQueryTenant?.Trim() ?? "";
+            }
+            return SecretEquals(expected, supplied);
+        }
+
+        private static bool SecretEquals(string expected, string supplied)
+        {
             var a = Encoding.UTF8.GetBytes(expected);
             var b = Encoding.UTF8.GetBytes(supplied);
             return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
@@ -1935,7 +2230,25 @@ namespace Dial50_MVC_Core.Controllers
             await Response.Body.FlushAsync(cancellationToken);
         }
 
-        private IActionResult? RequireApiKey()
+        private IActionResult? RequireApiKey() => CheckApiKey() ?? CheckTenantId();
+
+        private IActionResult? CheckTenantId()
+        {
+            var expected = _config["AiBridge:TenantId"]?.Trim();
+            if (string.IsNullOrWhiteSpace(expected))
+            {
+                if (_env.IsDevelopment()) return null;
+                return StatusCode(503, new Dictionary<string, object> { ["error"] = "AiBridge:TenantId is not configured on the server." });
+            }
+
+            if (Request.Headers.TryGetValue("X-Tenant-ID", out var headerValues) && headerValues.Count == 1
+                && SecretEquals(expected, headerValues[0]?.Trim() ?? ""))
+                return null;
+
+            return Unauthorized(new Dictionary<string, object> { ["error"] = "Invalid or missing X-Tenant-ID." });
+        }
+
+        private IActionResult? CheckApiKey()
         {
             var expected = _config["AiBridge:ApiKey"]?.Trim();
             if (string.IsNullOrWhiteSpace(expected))
@@ -2697,6 +3010,7 @@ namespace Dial50_MVC_Core.Controllers
         [JsonPropertyName("steps")] public List<string>? Steps { get; set; }
         [JsonPropertyName("selects")] public List<AiDynamicSelect>? Selects { get; set; }
         [JsonPropertyName("items")] public List<AiDynamicItem>? Items { get; set; }
+        [JsonPropertyName("intents")] public List<AiRunIntentPost>? Intents { get; set; }
     }
 
     public sealed class AiDynamicSelect

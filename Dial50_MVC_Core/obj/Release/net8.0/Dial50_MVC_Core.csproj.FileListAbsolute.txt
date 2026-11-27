@@ -3884,10 +3884,10 @@ D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai\Dial50_MVC_Core\obj\Release\
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai\Dial50_MVC_Core\obj\Release\net8.0\Dial50_MVC_Core.genruntimeconfig.cache
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai\Dial50_MVC_Core\obj\Release\net8.0\ref\Dial50_MVC_Core.dll
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\appsettings.Development.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\appsettings.json
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\App_Data\missing-strings.json
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\App_Data\translations.json
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\Data\region-language.json
-D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\appsettings.json
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\Dial50_MVC_Core.staticwebassets.runtime.json
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\Dial50_MVC_Core.staticwebassets.endpoints.json
 D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Dial50_MVC_Core\bin\Release\net8.0\Dial50_MVC_Core.deps.json

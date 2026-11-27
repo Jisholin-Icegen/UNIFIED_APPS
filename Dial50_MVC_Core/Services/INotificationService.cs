@@ -12,3 +12,4 @@ namespace Dial50_MVC_Core.Services
         Task<int> GetTotalCountByRoomAsync(string roomNo);
     }
 }
+

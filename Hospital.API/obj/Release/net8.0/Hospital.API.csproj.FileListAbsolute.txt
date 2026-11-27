@@ -210,3 +210,47 @@ D:\PROJECT\APOLLO - SEG & FULL QR AND WEBAPP\INHOUSE AI - HOME\Dial50_MVC_Core_I
 D:\PROJECT\APOLLO - SEG & FULL QR AND WEBAPP\INHOUSE AI - HOME\Dial50_MVC_Core_INHOUSE AI_V3\Hospital.API\obj\Release\net8.0\Hospital.API.pdb
 D:\PROJECT\APOLLO - SEG & FULL QR AND WEBAPP\INHOUSE AI - HOME\Dial50_MVC_Core_INHOUSE AI_V3\Hospital.API\obj\Release\net8.0\Hospital.API.genruntimeconfig.cache
 D:\PROJECT\APOLLO - SEG & FULL QR AND WEBAPP\INHOUSE AI - HOME\Dial50_MVC_Core_INHOUSE AI_V3\Hospital.API\obj\Release\net8.0\ref\Hospital.API.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\appsettings.Development.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\appsettings.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Hospital.API.staticwebassets.endpoints.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Hospital.API.exe
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Hospital.API.deps.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Hospital.API.runtimeconfig.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Hospital.API.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Hospital.API.pdb
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.IdentityModel.Abstractions.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.IdentityModel.JsonWebTokens.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.IdentityModel.Logging.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.IdentityModel.Protocols.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.IdentityModel.Tokens.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Microsoft.OpenApi.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Swashbuckle.AspNetCore.Swagger.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Swashbuckle.AspNetCore.SwaggerGen.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\Swashbuckle.AspNetCore.SwaggerUI.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\bin\Release\net8.0\System.IdentityModel.Tokens.Jwt.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.csproj.AssemblyReference.cache
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\rpswa.dswa.cache.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.GeneratedMSBuildEditorConfig.editorconfig
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.AssemblyInfoInputs.cache
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.AssemblyInfo.cs
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.csproj.CoreCompileInputs.cache
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.MvcApplicationPartsAssemblyInfo.cs
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.MvcApplicationPartsAssemblyInfo.cache
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.sourcelink.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\rjimswa.dswa.cache.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\rjsmrazor.dswa.cache.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\rjsmcshtml.dswa.cache.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\scopedcss\bundle\Hospital.API.styles.css
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\staticwebassets.build.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\staticwebassets.build.json.cache
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\staticwebassets.development.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\staticwebassets.build.endpoints.json
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\staticwebassets.upToDateCheck.txt
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.038336DB.Up2Date
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\refint\Hospital.API.dll
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.pdb
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\Hospital.API.genruntimeconfig.cache
+D:\PROJECT\UNIFIED AI - EXP\jisholin-fix-unified-ai-websocket\Hospital.API\obj\Release\net8.0\ref\Hospital.API.dll

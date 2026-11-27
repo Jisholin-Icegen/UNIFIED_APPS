@@ -134,9 +134,10 @@ function formatTime(s) {
     return String(m).padStart(2, "0") + ":" + (s % 60).toString().padStart(2, "0");
 }
 
+var elapsedSeconds = 0;
+
 function renderTimer() {
-    var elapsed = Math.min(Math.max(SESSION_SECONDS - timeLeft, 0), SESSION_SECONDS);
-    if (timerEl) timerEl.textContent = formatTime(elapsed);
+    if (timerEl) timerEl.textContent = formatTime(elapsedSeconds);
 }
 
 async function fetchProfileLanguage(id) {
@@ -1017,9 +1018,8 @@ function goConnected() {
 function startCountdown() {
     clearInterval(countdownTimer);
     countdownTimer = setInterval(function () {
-        timeLeft -= 1;
+        elapsedSeconds += 1;
         renderTimer();
-        if (timeLeft <= 0) endChat("ended");
     }, 1000);
 }
 
@@ -1295,3 +1295,4 @@ window.Dial50VAD = {
     reset: function () { localVad.reset(); },
     getState: function () { return { isSpeaking: localVad.isSpeaking, lastRms: localVad.lastRms, threshold: localVad.energyThreshold }; }
 };
+

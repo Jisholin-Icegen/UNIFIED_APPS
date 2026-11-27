@@ -2,6 +2,10 @@
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
 }
 
+<link rel="stylesheet" href="~/fontawesome/css/all.min.css" />
+<link rel="stylesheet" href="~/css/unified-ai.css" asp-append-version="true" />
+<script src="~/js/voice-agent/config.js" asp-append-version="true"></script>
+
 <style>
     .fab-wrap {
         position: fixed;
@@ -13,6 +17,26 @@
         gap: 14px;
         z-index: 2147483647;
         pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+
+        .fab-wrap.dragging .fab-action {
+            transition: none !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        .fab-wrap.open-left {
+            align-items: flex-start;
+        }
+
+            .fab-wrap.open-left .fab-action {
+                flex-direction: row-reverse;
+            }
+
+    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]):not([data-call-presentation="minimized"]):not([data-call-presentation="popup"]) .fab-talk-action {
+        display: none !important;
     }
 
     .fab-action {
@@ -46,7 +70,7 @@
         font-weight: 600;
         padding: 6px 11px;
         border-radius: 8px;
-        box-shadow: 0 3px 12px rgba(0,0,0,.15);
+        box-shadow: 0 3px 12px rgba(0, 0, 0, .15);
         white-space: nowrap;
     }
 
@@ -61,15 +85,15 @@
         align-items: center;
         justify-content: center;
         color: #fff;
-        box-shadow: 0 8px 18px rgba(120,80,200,.4);
+        box-shadow: 0 8px 18px rgba(120, 80, 200, .4);
     }
 
-        .mini.requests {
-            background: linear-gradient(150deg, #a94fd6, #7a5fe0);
-        }
-
+        .mini.requests,
         .mini.talk {
-            background: linear-gradient(150deg, #7b4fd6, #5f3fc9);
+            background: linear-gradient(150deg, #a94fd6, #7a5fe0);
+            color: #fff;
+            border: none;
+            box-shadow: 0 8px 18px rgba(120, 80, 200, .4);
         }
 
     .fab-main {
@@ -77,19 +101,30 @@
         height: 60px;
         border-radius: 50%;
         border: none;
-        cursor: pointer;
+        cursor: grab;
+        touch-action: none;
         background: linear-gradient(150deg, #3aa79f, #2f8f88);
         color: #fff;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 10px 24px rgba(47,143,136,.5);
+        box-shadow: 0 10px 24px rgba(47, 143, 136, .5);
         transition: transform .25s ease;
         pointer-events: auto;
     }
 
+    .fab-wrap.dragging .fab-main {
+        cursor: grabbing;
+        transition: none;
+        transform: scale(1.06);
+    }
+
     .fab-wrap.open .fab-main {
         transform: rotate(135deg);
+    }
+
+    .fab-wrap.dragging.open .fab-main {
+        transform: rotate(135deg) scale(1.06);
     }
 
     .fab-main .close-ico {
@@ -110,7 +145,7 @@
         left: 0;
         width: 100vw;
         height: 100vh;
-        background: rgba(20,24,34,.28);
+        background: rgba(20, 24, 34, .28);
         opacity: 0;
         pointer-events: none;
         transition: opacity .2s ease;
@@ -132,69 +167,35 @@
     }
 
     @@media (min-width: 768px) {
-        .fab-wrap {
+        .fab-wrap:not([data-dragged="1"]) {
             right: 32px;
             bottom: 100px;
         }
     }
 
     @@media (min-width: 1024px) {
-        .fab-wrap {
+        .fab-wrap:not([data-dragged="1"]) {
             right: 48px;
         }
     }
+
+    body.uai-in-frame .fab-talk-action {
+        display: none !important;
+    }
+
+    /* Call popup mode (FAB / non-home pages): the full call screen is never shown,
+               only the floating bar styled by unified-ai.css. The module layer is NOT hidden
+               so in-call navigation through the iframe keeps working. */
+    body[data-call-presentation="popup"] #callLayer,
+    body[data-call-presentation="popup"] #endedLayer,
+    body.uai-non-home #callLayer,
+    body.uai-non-home #endedLayer {
+        display: none !important;
+    }
 </style>
 
-<script>
-    function openRequests() {
-        BedContext.go('MyRequests');
-    }
-
-    function openAI() {
-        var bc = BedContext.get();
-        if (!bc.bedInfo) {
-            console.warn('[nav] no BedInfo token — cannot open AI call');
-            return;
-        }
-        BedContext.go('Home', { autoStartCall: '1' });
-    }
-
-    function Home() {
-        BedContext.go('Home');
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var fabWrap = document.getElementById('fabWrap');
-        var fabMain = document.getElementById('fabMain');
-        var overlay = document.getElementById('fabOverlay');
-
-        function toggleFab(open) {
-            fabWrap.classList.toggle('open', open);
-            overlay.classList.toggle('show', open);
-            fabMain.setAttribute('aria-expanded', open);
-        }
-
-        fabMain.addEventListener('click', function (e) {
-            e.stopPropagation();
-            toggleFab(!fabWrap.classList.contains('open'));
-        });
-
-        overlay.addEventListener('click', function () {
-            toggleFab(false);
-        });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                toggleFab(false);
-            }
-        });
-    });
-</script>
-
 <footer>
-
     <div class="fab-wrap" id="fabWrap">
-
         @if (controller != "MyRequests")
         {
             <div class="fab-action" onclick="openRequests()">
@@ -212,7 +213,7 @@
             </div>
         }
 
-        <div class="fab-action" onclick="openAI()">
+        <div class="fab-action fab-talk-action" onclick="openAI(true)">
             <span class="lbl">Talk to AI</span>
             <button type="button" class="mini talk" aria-label="Talk to AI">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
@@ -241,6 +242,350 @@
 
     <div>© 2026 Icegen Computing</div>
     <div id="dynamic-time"></div>
-
-   
 </footer>
+
+<script>
+    (function ensureFooterVoiceHostDom() {
+        if (!document.body) return;
+        if (!document.body.hasAttribute("data-state")) {
+            document.body.setAttribute("data-state", "idle");
+        }
+
+        if (!document.getElementById("unifiedAiModuleLayer")) {
+            var layer = document.createElement("div");
+            layer.id = "unifiedAiModuleLayer";
+            layer.setAttribute("aria-hidden", "true");
+            layer.innerHTML = '<iframe id="unifiedAiModuleFrame" title="Hospital services"></iframe>';
+            document.body.appendChild(layer);
+        }
+
+        if (!document.getElementById("unifiedAiFloatingBar")) {
+            var bar = document.createElement("div");
+            bar.id = "unifiedAiFloatingBar";
+            bar.setAttribute("aria-live", "polite");
+            bar.setAttribute("aria-label", "Persistent voice assistant");
+            bar.hidden = true;
+            bar.innerHTML =
+                '<button type="button" id="unifiedAiReturnButton" aria-label="Return to the AI screen">' +
+                    '<img src="/images/avatar.png" alt="" />' +
+                    '<span class="unified-ai-bar-copy">' +
+                        '<strong>Thara AI Assistant</strong>' +
+                        '<span class="unified-ai-bar-line">' +
+                            '<span id="unifiedAiBarStatus">Connecting...</span>' +
+                            '<span class="unified-ai-bar-timer" id="unifiedAiBarTimer" hidden>00:00</span>' +
+                        '</span>' +
+                    '</span>' +
+                '</button>' +
+                '<button type="button" id="unifiedAiBarMicButton" aria-label="Mute microphone">' +
+                    '<i class="fa-solid fa-microphone" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button type="button" id="unifiedAiBarChatButton" class="unified-ai-bar-action" aria-label="Go to Chat" title="Go to Chat">' +
+                    '<i class="fa-solid fa-comments" aria-hidden="true"></i>' +
+                '</button>' +
+                '<button type="button" id="unifiedAiBarEndButton" class="unified-ai-bar-action is-end" aria-label="End call" title="End call">' +
+                    '<i class="fa-solid fa-phone-slash" aria-hidden="true"></i>' +
+                '</button>';
+            document.body.appendChild(bar);
+        }
+
+        // Hidden stand-ins for the Home call screen elements that script.js looks up by id
+        if (!document.getElementById("callLayer")) {
+            var hooks = document.createElement("div");
+            hooks.id = "footerCallStateHooks";
+            hooks.style.display = "none";
+            hooks.setAttribute("data-footer-fallback", "1");
+            hooks.innerHTML =
+                '<button type="button" id="idleBtn"></button>' +
+                '<div id="callLayer" data-status="dialing">' +
+                    '<h2 id="callTitle">Dial50 Demo Hospital</h2>' +
+                    '<span id="callStatus">Connecting...</span>' +
+                    '<div id="sessionTimer">00:00</div>' +
+                    '<button type="button" id="micBtn"></button>' +
+                    '<button type="button" id="speakerBtn"></button>' +
+                    '<button type="button" id="endChatBtn"></button>' +
+                '</div>' +
+                '<div id="endedLayer"><button type="button" id="endedMicBtn"></button></div>';
+            document.body.appendChild(hooks);
+        }
+    })();
+
+    var IN_UNIFIED_FRAME = window.self !== window.top
+        && /[?&]UnifiedAI=1(&|$)/.test(window.location.search);
+
+    var IS_HOME_HOST = (function () {
+        var callLayer = document.getElementById("callLayer");
+        var hasNativeCallScreen = !!(callLayer && !callLayer.closest("#footerCallStateHooks"));
+        var path = (window.location.pathname || "").toLowerCase().replace(/\/+$/, "");
+        var isHomeRoute = path === "" || /\/(home|home\/index|ai|ai\/chat)$/.test(path);
+        return hasNativeCallScreen && isHomeRoute;
+    })();
+
+    (function () {
+        if (!document.body) return;
+        if (IN_UNIFIED_FRAME) {
+            document.body.classList.add("uai-in-frame");
+        } else if (!IS_HOME_HOST) {
+            document.body.classList.add("uai-non-home");
+        }
+    })();
+
+    function keepIdleLook(rules) {
+        Array.prototype.forEach.call(rules || [], function (rule) {
+            if (rule.styleSheet) {
+                try { keepIdleLook(rule.styleSheet.cssRules); } catch (e) { }
+            }
+            if (rule.cssRules && rule.cssRules.length) keepIdleLook(rule.cssRules);
+
+            var selector = rule.selectorText;
+            if (!selector || selector.indexOf("data-state") === -1) return;
+            if (/unifiedAi|\.uai-|footerCallStateHooks|\.fab-/i.test(selector)) return;
+
+            var updated = selector.replace(
+                /:not\(\[data-state="idle"\]\)|\[data-state="(idle|connecting|connected|ended)"\]/g,
+                function (match, state) {
+                    if (!state) return ':not([data-state="idle"], .uai-non-home)';
+                    if (state === "idle") return ':is([data-state="idle"], :where(.uai-non-home)[data-state])';
+                    return ':not(.uai-non-home)[data-state="' + state + '"]';
+                });
+            if (updated !== selector) rule.selectorText = updated;
+        });
+    }
+
+    function keepPageLookDuringCall() {
+        if (IN_UNIFIED_FRAME || IS_HOME_HOST) return;
+        Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+            try { keepIdleLook(sheet.cssRules); } catch (e) { }
+        });
+    }
+
+    keepPageLookDuringCall();
+    window.addEventListener("load", keepPageLookDuringCall);
+    document.addEventListener("load", function (event) {
+        if (event.target && event.target.tagName === "LINK") keepPageLookDuringCall();
+    }, true);
+
+    /* ---------- Lazy-load the voice stack on pages that don't include it ---------- */
+    var UAI_SCRIPTS = {
+        voice:  "@Url.Content("~/js/voice-agent/script.js")?v=1",
+        host:   "@Url.Content("~/js/unified-ai-host.js")?v=7",
+        bridge: "@Url.Content("~/js/unified-ai-bridge.js")?v=1"
+    };
+    var _uaiLoads = {};
+    var _uaiStackPromise = null;
+
+    function loadScriptOnce(key, isReady) {
+        if (isReady()) return Promise.resolve();
+        if (_uaiLoads[key]) return _uaiLoads[key];
+        _uaiLoads[key] = new Promise(function (resolve, reject) {
+            var s = document.createElement("script");
+            s.src = UAI_SCRIPTS[key];
+            s.onload = function () { resolve(); };
+            s.onerror = function () { delete _uaiLoads[key]; reject(new Error("Failed to load " + key)); };
+            document.body.appendChild(s);
+        });
+        return _uaiLoads[key];
+    }
+
+    function ensureVoiceStack() {
+        if (_uaiStackPromise) return _uaiStackPromise;
+        // Order matters: voice-agent -> host -> bridge (bridge listens to the host/voice events)
+        _uaiStackPromise = loadScriptOnce("voice", function () { return typeof window.connectToAvatarBackend === "function"; })
+            .then(function () { return loadScriptOnce("host", function () { return !!window.UnifiedAIHost; }); })
+            .then(function () { return loadScriptOnce("bridge", function () { return !!window.UnifiedAIBridge; }); })
+            .catch(function (err) { _uaiStackPromise = null; throw err; });
+        return _uaiStackPromise;
+    }
+
+    function showPopupForAnyCall() {
+        if (IN_UNIFIED_FRAME || IS_HOME_HOST || !document.body) return;
+        new MutationObserver(function () {
+            var state = document.body.getAttribute("data-state");
+            if (state !== "connecting" && state !== "connected") return;
+            keepPageLookDuringCall();
+            if (document.body.getAttribute("data-call-presentation") !== "popup") {
+                document.body.setAttribute("data-call-presentation", "popup");
+            }
+            ensureVoiceStack().catch(function (err) {
+                console.error("[voice] could not show the call popup:", err);
+            });
+        }).observe(document.body, { attributes: true, attributeFilter: ["data-state"] });
+    }
+
+    showPopupForAnyCall();
+
+    function closeFabMenu() {
+        var fabWrap = document.getElementById("fabWrap");
+        var fabMain = document.getElementById("fabMain");
+        var overlay = document.getElementById("fabOverlay");
+        if (fabWrap) {
+            fabWrap.classList.remove("open");
+            fabWrap.classList.remove("dragging");
+        }
+        if (fabMain) fabMain.setAttribute("aria-expanded", "false");
+        if (overlay) overlay.classList.remove("show");
+    }
+
+    function openRequests() {
+        closeFabMenu();
+        BedContext.go("MyRequests");
+    }
+
+    function openAI(forcePopup) {
+        closeFabMenu();
+        if (IN_UNIFIED_FRAME) return;
+        keepPageLookDuringCall();
+
+        var bc = window.BedContext && typeof BedContext.get === "function" ? BedContext.get() : {};
+        var userId = bc.bedId || (typeof window.getWidgetUserId === "function" ? window.getWidgetUserId() : null);
+        if (!bc.bedInfo && !userId) {
+            console.warn("[voice] no BedInfo or bedId");
+            return;
+        }
+
+        ensureVoiceStack().then(function () {
+            // Non-home pages never show the full call screen, only the popup bar
+            if (!IS_HOME_HOST) document.body.setAttribute("data-call-presentation", "popup");
+
+            var state = document.body.getAttribute("data-state");
+            if (state !== "connecting" && state !== "connected") {
+                if (typeof window.setState === "function") window.setState("connecting");
+                else document.body.setAttribute("data-state", "connecting");
+
+                if (typeof window.setCallStatus === "function") window.setCallStatus("dialing");
+                window.connectToAvatarBackend();
+            }
+
+            // Show the call as the floating bar (on Home this minimizes the full call screen)
+            if (window.UnifiedAIHost && typeof window.UnifiedAIHost.minimizeCall === "function") {
+                window.UnifiedAIHost.minimizeCall();
+            }
+
+            var bar = document.getElementById("unifiedAiFloatingBar");
+            if (bar) bar.hidden = false;
+        }).catch(function (err) {
+            console.error("[voice] could not start assistant:", err);
+        });
+    }
+
+    function Home() {
+        closeFabMenu();
+        BedContext.go("Home");
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+        var fabWrap = document.getElementById("fabWrap");
+        var fabMain = document.getElementById("fabMain");
+        var overlay = document.getElementById("fabOverlay");
+        if (!fabWrap || !fabMain || !overlay) return;
+
+        function toggleFab(open) {
+            fabWrap.classList.toggle("open", open);
+            overlay.classList.toggle("show", open);
+            fabMain.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+
+        function updateFabMenuSide() {
+            var rect = fabWrap.getBoundingClientRect();
+            var onLeftHalf = rect.left + rect.width / 2 < window.innerWidth / 2;
+            fabWrap.classList.toggle("open-left", onLeftHalf);
+        }
+
+        function clampAndPlaceFab(left, top) {
+            var margin = 8;
+            var rect = fabWrap.getBoundingClientRect();
+            var w = rect.width || 60;
+            var h = rect.height || 60;
+            var maxLeft = Math.max(margin, window.innerWidth - w - margin);
+            var maxTop = Math.max(margin, window.innerHeight - h - margin);
+            var clampedLeft = Math.min(Math.max(margin, left), maxLeft);
+            var clampedTop = Math.min(Math.max(margin, top), maxTop);
+
+            fabWrap.setAttribute("data-dragged", "1");
+            fabWrap.style.left = clampedLeft + "px";
+            fabWrap.style.top = clampedTop + "px";
+            fabWrap.style.right = "auto";
+            fabWrap.style.bottom = "auto";
+            updateFabMenuSide();
+        }
+
+        var isDragging = false;
+        var hasMoved = false;
+        var suppressNextClick = false;
+        var startX = 0;
+        var startY = 0;
+        var originLeft = 0;
+        var originTop = 0;
+        var dragThreshold = 6;
+
+        fabMain.addEventListener("pointerdown", function (e) {
+            if (e.button !== undefined && e.button !== 0 && e.pointerType === "mouse") return;
+            var rect = fabWrap.getBoundingClientRect();
+            isDragging = true;
+            hasMoved = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            originLeft = rect.left;
+            originTop = rect.top;
+            try { fabMain.setPointerCapture(e.pointerId); } catch (err) { }
+        });
+
+        fabMain.addEventListener("pointermove", function (e) {
+            if (!isDragging) return;
+            var dx = e.clientX - startX;
+            var dy = e.clientY - startY;
+            if (!hasMoved && Math.hypot(dx, dy) >= dragThreshold) {
+                hasMoved = true;
+                fabWrap.classList.add("dragging");
+                toggleFab(false);
+            }
+            if (hasMoved) {
+                clampAndPlaceFab(originLeft + dx, originTop + dy);
+            }
+        });
+
+        function finishDrag(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            fabWrap.classList.remove("dragging");
+            try {
+                if (e && e.pointerId !== undefined && fabMain.hasPointerCapture(e.pointerId)) {
+                    fabMain.releasePointerCapture(e.pointerId);
+                }
+            } catch (err) { }
+            if (hasMoved) {
+                suppressNextClick = true;
+                setTimeout(function () { suppressNextClick = false; }, 50);
+            }
+        }
+
+        fabMain.addEventListener("pointerup", finishDrag);
+        fabMain.addEventListener("pointercancel", finishDrag);
+
+        window.addEventListener("resize", function () {
+            if (fabWrap.getAttribute("data-dragged") === "1") {
+                var rect = fabWrap.getBoundingClientRect();
+                clampAndPlaceFab(rect.left, rect.top);
+            }
+        });
+
+        fabMain.addEventListener("click", function (e) {
+            e.stopPropagation();
+            if (suppressNextClick) {
+                suppressNextClick = false;
+                return;
+            }
+            updateFabMenuSide();
+            toggleFab(!fabWrap.classList.contains("open"));
+        });
+
+        overlay.addEventListener("click", function () {
+            toggleFab(false);
+        });
+
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "Escape") {
+                toggleFab(false);
+            }
+        });
+    });
+</script>

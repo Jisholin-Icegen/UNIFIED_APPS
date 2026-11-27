@@ -43,7 +43,7 @@
         width: 100%;
         max-width: 100%;
         min-width: 0;
-        height: 100%; 
+        height: 100%;
         flex: 1 1 auto;
         margin: 0 auto;
         padding: 0;
@@ -76,18 +76,15 @@
         }
 
     @@media (max-width: 480px) {
-        body
+        body {
+            justify-content: stretch !important;
+        }
 
-    {
-        justify-content: stretch !important;
-    }
-
-    .app-wrapper {
-        max-width: 100%;
-        margin-left: 0;
-        margin-right: 0;
-    }
-
+        .app-wrapper {
+            max-width: 100%;
+            margin-left: 0;
+            margin-right: 0;
+        }
     }
 
     #pageContent,
@@ -215,39 +212,36 @@
             }
 
     @@media (max-width: 360px) {
-        #pageContent, #pageContent.content
-
-    {
-        gap: 10px !important;
-        padding: 10px !important;
-    }
-
-    #pageContent .card {
-        padding: 10px 6px !important;
-        border-radius: 15px !important;
-    }
-
-        #pageContent .card .icon-box {
-            width: 44px !important;
-            height: 44px !important;
-            min-width: 44px !important;
-            min-height: 44px !important;
-            margin-bottom: 8px !important;
+        #pageContent, #pageContent.content {
+            gap: 10px !important;
+            padding: 10px !important;
         }
 
-            #pageContent .card .icon-box img {
-                width: 26px !important;
-                height: 26px !important;
+            #pageContent .card {
+                padding: 10px 6px !important;
+                border-radius: 15px !important;
             }
 
-        #pageContent .card h3 {
-            font-size: 14px !important;
-        }
+                #pageContent .card .icon-box {
+                    width: 44px !important;
+                    height: 44px !important;
+                    min-width: 44px !important;
+                    min-height: 44px !important;
+                    margin-bottom: 8px !important;
+                }
 
-        #pageContent .card p {
-            font-size: 12px !important;
-        }
+                    #pageContent .card .icon-box img {
+                        width: 26px !important;
+                        height: 26px !important;
+                    }
 
+                #pageContent .card h3 {
+                    font-size: 14px !important;
+                }
+
+                #pageContent .card p {
+                    font-size: 12px !important;
+                }
     }
 
     .chat-confirm-overlay {
@@ -882,8 +876,8 @@
     }
 
     /* =====================================================
-           REQUEST SUCCESS MODAL
-           ===================================================== */
+               REQUEST SUCCESS MODAL
+               ===================================================== */
     .modal-overlay {
         position: fixed;
         top: 0;
@@ -1191,7 +1185,7 @@
         margin: 0 !important;
     }
 
-        .request-loading-overlay {
+    .request-loading-overlay {
         position: fixed;
         inset: 0;
         width: 100%;
@@ -1315,59 +1309,47 @@
     }
 
     @@keyframes loadingSpin {
-        from
+        from {
+            transform: rotate(0deg);
+        }
 
-    {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
-
+        to {
+            transform: rotate(360deg);
+        }
     }
 
     @@keyframes loadingSpinReverse {
-        from
+        from {
+            transform: rotate(360deg);
+        }
 
-    {
-        transform: rotate(360deg);
-    }
-
-    to {
-        transform: rotate(0deg);
-    }
-
+        to {
+            transform: rotate(0deg);
+        }
     }
 
     @@keyframes loadingModalIn {
-        from
+        from {
+            opacity: 0;
+            transform: scale(0.94);
+        }
 
-    {
-        opacity: 0;
-        transform: scale(0.94);
-    }
-
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
     }
 
     @@media (max-width: 480px) {
-        .request-loading-modal
-
-    {
-        max-width: 340px;
-        min-height: 340px;
-    }
-
+        .request-loading-modal {
+            max-width: 340px;
+            min-height: 340px;
+        }
     }
 
     /* ============================================================
-           FULLSCREEN CALL MODE
-           ============================================================ */
+               FULLSCREEN CALL MODE
+               ============================================================ */
     body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) {
         width: 100vw !important;
         height: 100vh !important;
@@ -1630,12 +1612,7 @@
         if (document.body && !document.body.hasAttribute("data-state")) {
             document.body.setAttribute("data-state", "idle");
         }
-        var params = new URLSearchParams(window.location.search);
-        var autoStart = params.get("autoStartCall") === "1"
-                     || sessionStorage.getItem("autoStartCall") === "1";
-        if (autoStart) {
-            document.documentElement.setAttribute("data-autostart", "pending");
-        }
+        try { sessionStorage.removeItem("autoStartCall"); } catch (e) { }
     })();
 
 </script>
@@ -2465,7 +2442,7 @@
         window.hideRequestLoading = hideRequestLoading;
 
         function closeSuccessModal() {
-            _successModalToken++;   
+            _successModalToken++;
             var overlay = document.getElementById('requestSuccessScreen');
             if (overlay) {
                 overlay.classList.remove('show');
@@ -2531,62 +2508,6 @@
                 showSuccessModal(taskId);
             });
         }
-
-        document.addEventListener("DOMContentLoaded", function () {
-            var params = new URLSearchParams(window.location.search);
-            var autoStart = params.get("autoStartCall") === "1"
-                         || sessionStorage.getItem("autoStartCall") === "1";
-
-            if (!autoStart) {
-                document.documentElement.removeAttribute("data-autostart");
-                return;
-            }
-
-            sessionStorage.removeItem("autoStartCall");
-
-            var attempts = 0;
-            var tryStart = setInterval(function () {
-                attempts++;
-
-                var btn = document.getElementById("idleBtn");
-                var hasFn = typeof window.connectToAvatarBackend === "function";
-
-                if (btn && hasFn) {
-                    clearInterval(tryStart);
-
-                    var state = document.body.getAttribute("data-state");
-                    if (state === "connecting" || state === "connected") {
-                        document.documentElement.removeAttribute("data-autostart");
-                        return;
-                    }
-
-                    if (typeof window.setState === "function") {
-                        window.setState("connecting");
-                    } else {
-                        document.body.setAttribute("data-state", "connecting");
-                    }
-
-                    if (typeof window.setCallStatus === "function") {
-                        window.setCallStatus("dialing");
-                    }
-
-                    window.connectToAvatarBackend();
-
-                    var url = new URL(window.location.href);
-                    url.searchParams.delete("autoStartCall");
-                    window.history.replaceState({}, "", url.toString());
-
-                    document.documentElement.removeAttribute("data-autostart");
-                    return;
-                }
-
-                if (attempts > 40) {
-                    clearInterval(tryStart);
-                    document.documentElement.removeAttribute("data-autostart");
-                    console.warn("[autoStartCall] video-agent never became ready");
-                }
-            }, 100);
-        });
 
         // Pending popups from other pages + polling loop
         document.addEventListener("DOMContentLoaded", function () {
@@ -2712,7 +2633,7 @@
                         }
 
                         setTimeout(function () {
-                            if (_isNavigatingBack) return; 
+                            if (_isNavigatingBack) return;
                             hideRequestLoading();
                             openVideoOverlay(v.videoLinks, v.categoryName);
                         }, 1500);
@@ -2805,4 +2726,3 @@
         }
     })();
 </script>
-

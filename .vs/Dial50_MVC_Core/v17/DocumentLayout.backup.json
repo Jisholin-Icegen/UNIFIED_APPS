@@ -1,7 +1,24 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\controllers\\aibridgecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\controllers\\aibridgecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\wwwroot\\js\\unified-ai-host.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-ai-host.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\shared\\_footer.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\shared\\_footer.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\roomcomfort\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\roomcomfort\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,7 +26,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Bookmark",
@@ -18,6 +35,58 @@
             {
               "$type": "Bookmark",
               "Name": "ST:129:0:{1fc202d4-d401-403c-9834-5b218574bb67}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Index.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
+              "ViewState": "AgIAANAAAAAAAAAAAAAAAO8AAAAqAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-11-27T12:31:28.147Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "_footer.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
+              "ViewState": "AgIAADECAAAAAAAAAADwv04CAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-11-27T12:23:52.166Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "unified-ai-host.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
+              "ViewState": "AgIAAHAHAAAAAAAAAAAqwI8HAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-27T12:23:34.524Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AiBridgeController.cs",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "RelativeToolTip": "Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
+              "ViewState": "AgIAAB8MAAAAAAAAAAAIwDMMAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-11-27T12:16:33.547Z",
+              "EditorCaption": ""
             }
           ]
         }

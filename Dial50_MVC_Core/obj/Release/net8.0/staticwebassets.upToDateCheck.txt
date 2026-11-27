@@ -389,7 +389,6 @@ wwwroot\js\Tracking.js
 wwwroot\js\unified-ai-bridge.js
 wwwroot\js\unified-ai-child.js
 wwwroot\js\unified-ai-frame.js
-wwwroot\js\unified-ai-host.js
 wwwroot\js\unified-ai-test.js
 wwwroot\js\unified-voice-nav.js
 wwwroot\js\video-ai\config.js
@@ -473,3 +472,4 @@ wwwroot\Mydailycarevideos\Eye Checkup.mp4
 wwwroot\Mydailycarevideos\Health.mp4
 wwwroot\Mydailycarevideos\Machine.mp4
 wwwroot\sw.js
+wwwroot\js\unified-ai-host.js

@@ -56,22 +56,49 @@ namespace Dial50_MVC_Core.Repositories
             return list;
         }
 
+
         public async Task<bool> MarkAllAsReadByRoomAsync(string roomNo)
         {
-            using SqlConnection con = new SqlConnection(GetCs());
-            using SqlCommand cmd = new SqlCommand("SP_MOB_NOTIFICATION", con);
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Parameters.AddWithValue("@Process", "MARK_ALL_READ");
-            cmd.Parameters.AddWithValue("@RoomNo", roomNo);
-            cmd.Parameters.AddWithValue("@NotificationID", DBNull.Value);
-            cmd.Parameters.AddWithValue("@MaxCount", 0);
-
-            await con.OpenAsync();
-            var rows = await cmd.ExecuteNonQueryAsync();
-
-            return rows > 0;
+            try
+            {
+                using SqlConnection con = new SqlConnection(GetCs());
+                using SqlCommand cmd = new SqlCommand("SP_MOB_NOTIFICATION", con);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@Process", "MARK_ALL_READ");
+                cmd.Parameters.AddWithValue("@RoomNo", roomNo);
+                cmd.Parameters.AddWithValue("@NotificationID", DBNull.Value);
+                cmd.Parameters.AddWithValue("@MaxCount", 0);
+                await con.OpenAsync();
+                using SqlDataReader reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    int updatedCount = reader["UPDATED_COUNT"] != DBNull.Value
+                        ? Convert.ToInt32(reader["UPDATED_COUNT"])
+                        : 0;
+                    _logger.LogInformation(
+                        "MarkAllAsRead: Room={RoomNo}, UpdatedCount={UpdatedCount}, Result={Result}",
+                        roomNo,
+                        updatedCount,
+                        reader["RESULT"]?.ToString()
+                    );
+                    return updatedCount > 0;
+                }
+                _logger.LogWarning(
+                    "MarkAllAsRead returned no result for Room {RoomNo}",
+                    roomNo
+                );
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Error marking all notifications as read for Room {RoomNo}",
+                    roomNo
+                );
+                throw;
+            }
         }
-
         public async Task<int> GetUnreadCountByRoom(string roomNo)
         {
             try
