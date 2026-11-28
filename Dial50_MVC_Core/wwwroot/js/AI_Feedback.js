@@ -1,7 +1,7 @@
 ﻿
 
 const CLIENT_CONFIG = window.CLIENT_CONFIG || {
-    backendUrl: "https://dial50-voice-agent-dev.bravemoss-bf12527e.centralindia.azurecontainerapps.io",
+    backendUrl: "http://0.0.0.0:8000",
     defaultUserId: "9330",
     defaultLanguage: "English",
     defaultDialect: "United States",
