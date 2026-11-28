@@ -1,16 +1,3 @@
-# .NET build outputs
-**/bin/
-**/obj/
-
-# Visual Studio
-.vs/
-*.user
-*.suo
-*.userosscache
-*.sln.docstates
-
-# Node.js
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
+.vs/ 
+bin/ 
+obj/ 
