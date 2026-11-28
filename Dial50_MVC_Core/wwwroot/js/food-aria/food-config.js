@@ -1,8 +1,8 @@
 window.FOOD_AI_CONFIG = {
-    wsEndpoint: "wss://dial50-voice-agent-dev.bravemoss-bf12527e.centralindia.azurecontainerapps.io/dining",
-    appUrl: "https://dial50-voice-agent-dev.bravemoss-bf12527e.centralindia.azurecontainerapps.io/dining",
+    wsEndpoint: "ws://localhost:8000/dining",
+    appUrl: "http://localhost:8000/dining",
     tokenUrl: "",
-    BACKEND_HTTP: "https://dial50-voice-agent-dev.bravemoss-bf12527e.centralindia.azurecontainerapps.io",
-    BACKEND_WS: "wss://dial50-voice-agent-dev.bravemoss-bf12527e.centralindia.azurecontainerapps.io",
+    BACKEND_HTTP: "http://localhost:8000",
+    BACKEND_WS: "ws://localhost:8000",
     PROFILE_API_URL: "https://apollodevdial50api.portzo.net/Traczo/GetProfileOld",
 };

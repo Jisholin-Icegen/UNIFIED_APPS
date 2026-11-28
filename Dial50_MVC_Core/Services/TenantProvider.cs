@@ -59,21 +59,30 @@ namespace Dial50_MVC_Core.Services
                 }
             }
 
-            if (string.IsNullOrEmpty(tenantId))
+            if (string.IsNullOrWhiteSpace(tenantId))
             {
                 tenantId = context.Session.GetString("XTenantID")
                     ?? context.Session.GetString("XTenentID");
-                if (string.IsNullOrWhiteSpace(tenantId))
-                {
-                    throw new InvalidOperationException(
-                        "A tenant ID is required while multi-tenant mode is enabled.");
-                }
             }
-            else
+
+            if (string.IsNullOrWhiteSpace(tenantId))
             {
-                context.Session.SetString("XTenantID", tenantId);
-                context.Session.SetString("XTenentID", tenantId);
+                tenantId = context.Request.Headers["X-Tenant-ID"].ToString();
             }
+
+            if (string.IsNullOrWhiteSpace(tenantId))
+            {
+                tenantId = context.Request.Cookies["XTenantID"] ?? "";
+            }
+
+            if (string.IsNullOrWhiteSpace(tenantId))
+            {
+                throw new InvalidOperationException(
+                    "A tenant ID is required while multi-tenant mode is enabled.");
+            }
+
+            context.Session.SetString("XTenantID", tenantId);
+            context.Session.SetString("XTenentID", tenantId);
 
             string finalCode = tenantId;
 

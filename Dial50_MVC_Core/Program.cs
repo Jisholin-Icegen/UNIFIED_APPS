@@ -176,7 +176,7 @@ app.Use(async (context, next) =>
         var hasBedInfo = context.Request.Query.ContainsKey("BedInfo")
                          && !string.IsNullOrWhiteSpace(context.Request.Query["BedInfo"]);
 
-        if ((path == "/home" || path == "/home/index") && !hasBedInfo)
+        if ((path.Length == 0 || path == "/home" || path == "/home/index") && !hasBedInfo)
         {
             context.Response.Redirect("/PreLanding");
             return;
