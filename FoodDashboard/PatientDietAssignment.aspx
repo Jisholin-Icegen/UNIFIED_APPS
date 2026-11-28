@@ -710,17 +710,7 @@
                             <div class="full-width">
                                 <label>KNOWN ALLERGIES</label>
                                 <div class="allergy-wrap" id="allergyPillsContainer">
-                                    <span class="allergy-pill" data-value="Dairy">Dairy</span>
-                                    <span class="allergy-pill" data-value="Eggs">Eggs</span>
-                                    <span class="allergy-pill" data-value="Wheat">Wheat</span>
-                                    <span class="allergy-pill" data-value="Peanuts">Peanuts</span>
-                                    <span class="allergy-pill" data-value="Shellfish">Shellfish</span>
-                                    <span class="allergy-pill" data-value="Fish">Fish</span>
-                                    <span class="allergy-pill" data-value="Soy">Soy</span>
-                                    <span class="allergy-pill" data-value="Nuts">Nuts</span>
-                                    <span class="allergy-pill" data-value="Coconut">Coconut</span>
-                                    <span class="allergy-pill" data-value="Sesame">Sesame</span>
-
+                          
                                     <span class="allergy-pill" id="pillOthers" data-value="Others">Others</span>
 
                                     <div id="customAllergyWrapper" style="display: none; align-items: center; gap: 8px; margin-top: 15px; width: 100%;">

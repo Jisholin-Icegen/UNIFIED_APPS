@@ -591,6 +591,9 @@ public partial class Index_Service_Service : System.Web.UI.Page
             case "GETMENUMASTERITEMS_LO":
                 data = LO_GetMenuMasterItems();
                 break;
+            case "ALLERGYMASTER":
+                data = AllergyMaster();
+                break;
         }
         //data = getRecords();
         ResponseWrite(data);
@@ -2720,7 +2723,20 @@ public partial class Index_Service_Service : System.Web.UI.Page
         ds.Tables.Add(dt);
         return ds;
     }
+    private DataSet AllergyMaster()
+    {
+        DataSet ds = new DataSet();
+        string action = string.IsNullOrEmpty(Request.QueryString["ACTION"])? "GETLIST" : AESEncrytDecry.DecryptStringAES(Request.QueryString["ACTION"]);
+        string allergyCode = string.IsNullOrEmpty(Request.QueryString["ALLERGYCODE"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["ALLERGYCODE"]);
+        string allergyName = string.IsNullOrEmpty(Request.QueryString["ALLERGYNAME"]) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["ALLERGYNAME"]);
+        string isActive = string.IsNullOrEmpty(Request.QueryString["ISACTIVE"])? "1" : AESEncrytDecry.DecryptStringAES(Request.QueryString["ISACTIVE"]);
+        string searchText = string.IsNullOrEmpty(Request.QueryString["SEARCHTEXT"])? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["SEARCHTEXT"]);
+        string showInactive = string.IsNullOrEmpty(Request.QueryString["SHOWINACTIVE"])? "0" : AESEncrytDecry.DecryptStringAES(Request.QueryString["SHOWINACTIVE"]);
 
+        DataTable dt = DataAccess.ManageAllergyMaster(action, allergyCode, allergyName, isActive, searchText, showInactive);
+        ds.Tables.Add(dt);
+        return ds;
+    }
     private DataSet INSERTUPDATEPATIENTDIETASSIGNMENT()
     {
         string PatientName = (string.IsNullOrEmpty(Request.QueryString["PATIENTNAME"])) ? "" : AESEncrytDecry.DecryptStringAES(Request.QueryString["PATIENTNAME"].ToString());

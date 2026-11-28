@@ -1327,23 +1327,62 @@ $(document).on("click", ".allergy-pill", function (e) {
 });
 
 function AddCustomAllergyTag() {
-    var val = $('#txtCustomAllergy').val().trim();
+    var $input = $("#txtCustomAllergy");
+    var val = ($input.val() || "").trim();
     if (!val) return;
+    var $existingMasterPill = $("#allergyPillsContainer .allergy-pill").filter(function () {
+        return $(this).attr("id") !== "pillOthers" &&
+            ($(this).attr("data-value") || "").replace(/^Custom:/i, "").trim().toLowerCase() === val.toLowerCase();
+    });
 
-    if ($('#customAllergyTags').find("[data-value='Custom:" + val + "']").length > 0) {
-        $('#txtCustomAllergy').val('');
+    if ($existingMasterPill.length > 0) {
+        $existingMasterPill.first().addClass("active");
+        var existingName = $existingMasterPill.first().attr("data-value").replace(/^Custom:/i, "").trim();
+        if (!selectedAllergies.includes(existingName)) {
+            selectedAllergies.push(existingName);
+        }
+        $input.val("").focus();
+        ShowToast('"' + existingName + '" selected.', "info");
         return;
     }
 
-    var tagId = 'custom_' + Date.now();
-    var tagHtml = `
-        <span class="allergy-pill active" id="${tagId}" data-value="Custom:${val}" style="background: #fef2f2; border-color: #ef4444; color: #b91c1c; margin-right: 6px; margin-bottom: 6px;">
-            ${val} <i class="fa fa-times ms-1" style="cursor:pointer;" onclick="event.stopPropagation(); RemoveCustomAllergyTag('${tagId}')"></i>
-        </span>
-    `;
+    var $addBtn = $("#customAllergyWrapper button");
+    $addBtn.prop("disabled", true).text("Adding...");
 
-    $('#customAllergyTags').append(tagHtml);
-    $('#txtCustomAllergy').val('').focus();
+    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("ALLERGYMASTER")) +
+        "&ACTION=" + encodeURIComponent(Encrypt("INSERT")) +
+        "&ALLERGYCODE=" + encodeURIComponent(Encrypt("")) +
+        "&ALLERGYNAME=" + encodeURIComponent(Encrypt(val)) +
+        "&ISACTIVE=" + encodeURIComponent(Encrypt("1"));
+
+    $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (res) {
+            $addBtn.prop("disabled", false).text("Add");
+
+            var result = res && res[0] ? (res[0].RESULT || res[0].Status || "") : "";
+            if (String(result).toUpperCase() === "TRUE" || String(result).toUpperCase() === "SUCCESS") {
+                var $pill = $("<span>", {"class": "allergy-pill active","attr": { "data-value": val }, "text": val});
+                $pill.insertBefore($("#pillOthers"));
+
+                if (!selectedAllergies.includes(val)) {
+                    selectedAllergies.push(val);
+                }
+
+                $input.val("").focus();
+                ShowToast('"' + val + '" added to Allergy Master.', "success");
+            } else {
+                var msg = (res && res[0] && (res[0].MESSAGE || res[0].Message)) || "Failed to add allergy to Allergy Master.";
+                ShowToast(msg, "error");
+            }
+        },
+        error: function () {
+            $addBtn.prop("disabled", false).text("Add");
+            ShowToast("Error saving allergy to Allergy Master.", "error");
+        }
+    });
 }
 
 function RemoveCustomAllergyTag(tagId) {
@@ -1361,7 +1400,7 @@ function EditPatient(id) {
             if (res.length > 0) {
                 var item = res[0];
 
-                openAdmitPatientModal(item.COUNTRYID);
+                openAdmitPatientModal(item.COUNTRYID, item.ALLERGIES || "");
 
                 $("#hdnPatientId").val(item.ID);
                 $(".custom-modal-header h2").text("Edit Patient Details");
@@ -1406,31 +1445,6 @@ function EditPatient(id) {
                 } else {
                     $("#chkIsolation").prop("checked", false).trigger('change');
                     $("#txtIsolationReason").val('');
-                }
-
-                if (item.ALLERGIES && item.ALLERGIES.trim() !== "" && item.ALLERGIES !== "None") {
-                    var allergyList = item.ALLERGIES.split(",");
-                    allergyList.forEach(function (a) {
-                        a = a.trim();
-                        var $pill = $(".allergy-pill[data-value='" + a + "']");
-
-                        if ($pill.length > 0 && $pill.attr('id') !== 'pillOthers') {
-                            $pill.addClass("active");
-                        } else {
-                            if (!$("#pillOthers").hasClass("active")) {
-                                $("#pillOthers").addClass("active");
-                                $("#customAllergyWrapper").css('display', 'flex');
-                            }
-
-                            var tagId = 'custom_' + Date.now() + Math.floor(Math.random() * 100);
-                            var tagHtml = `
-                                <span class="allergy-pill active" id="${tagId}" data-value="Custom:${a}" style="background: #fef2f2; border-color: #ef4444; color: #b91c1c; margin-right: 6px; margin-bottom: 6px;">
-                                    ${a} <i class="fa fa-times ms-1" style="cursor:pointer;" onclick="event.stopPropagation(); RemoveCustomAllergyTag('${tagId}')"></i>
-                                </span>
-                            `;
-                            $('#customAllergyTags').append(tagHtml);
-                        }
-                    });
                 }
             }
         }
@@ -1674,7 +1688,7 @@ function Encrypt(Value) {
         });
     return encryptedVal;
 }
-function openAdmitPatientModal(countryId) {
+function openAdmitPatientModal(countryId, allergiesCsv) { 
     $("#ddlDietType").val("");
     $("#urgentDietWrap").hide();
     $("#chkUrgentDiet").prop("checked", false);
@@ -1697,7 +1711,7 @@ function openAdmitPatientModal(countryId) {
     $("#customAllergyTags").empty();
     $("#customAllergyWrapper").slideUp(0);
     $("#txtCustomAllergy").val("");
-
+    LoadAllergyMasterPills(allergiesCsv || "");
     LoadCountryDropdown(countryId);
 
     $("#admitPatientModal").modal({ backdrop: 'static', keyboard: false });
@@ -3901,6 +3915,94 @@ function LoadCountryDropdown(selectedCountryId) {
             ddl.empty();
             ddl.append('<option value="">Error loading countries</option>');
             ddl.SumoSelect();
+        }
+    });
+}
+function LoadAllergyMasterPills(preselectedCsv) {
+    var $container = $("#allergyPillsContainer");
+    var $pillOthers = $("#pillOthers");
+    if (!$container.length || !$pillOthers.length) return;
+
+    // Remove previously loaded dynamic master pills (keep #pillOthers, #customAllergyWrapper, #customAllergyTags)
+    $container.children(".allergy-pill").not("#pillOthers").remove();
+    $("#customAllergyTags").empty();
+    $("#pillOthers").removeClass("active");
+    $("#customAllergyWrapper").hide();
+    $("#txtCustomAllergy").val("");
+    selectedAllergies = [];
+
+    var preselectedList = [];
+    if (preselectedCsv && preselectedCsv.trim() !== "" && preselectedCsv.toLowerCase() !== "none") {
+        preselectedList = preselectedCsv.split(",").map(function (s) {
+            return s.trim();
+        }).filter(Boolean);
+    }
+
+    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("ALLERGYMASTER")) +
+        "&ACTION=" + encodeURIComponent(Encrypt("GETLIST")) +
+        "&SEARCHTEXT=" + encodeURIComponent(Encrypt("")) +
+        "&SHOWINACTIVE=" + encodeURIComponent(Encrypt("0"));
+
+    $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (res) {
+            $container.children(".allergy-pill").not("#pillOthers").remove();
+
+            var list = Array.isArray(res)
+                ? res
+                : (res && res.Tables && res.Tables[0] && res.Tables[0].Rows ? res.Tables[0].Rows : []);
+
+            var masterNamesLower = [];
+
+            $.each(list, function (i, item) {
+                var isActive = item.ISACTIVE === undefined || item.ISACTIVE === true || item.ISACTIVE == 1;
+                if (!isActive) return;
+
+                var allergyName = (item.AllergyName || item.ALLERGYNAME || item.NAME || "").trim();
+                if (!allergyName) return;
+
+                masterNamesLower.push(allergyName.toLowerCase());
+
+                var isSelected = preselectedList.some(function (p) {
+                    return p.toLowerCase() === allergyName.toLowerCase();
+                });
+
+                if (isSelected && !selectedAllergies.includes(allergyName)) {
+                    selectedAllergies.push(allergyName);
+                }
+
+                var $pill = $("<span>", {
+                    "class": "allergy-pill" + (isSelected ? " active" : ""),
+                    "attr": { "data-value": allergyName },
+                    "text": allergyName
+                });
+
+                // Insert right before "Others" so "Others" always stays last
+                $pill.insertBefore($pillOthers);
+            });
+
+            // Any saved allergy not in Allergy Master goes into "Others" custom tags (same behavior as before)
+            preselectedList.forEach(function (savedName) {
+                if (masterNamesLower.indexOf(savedName.toLowerCase()) === -1) {
+                    if (!$("#pillOthers").hasClass("active")) {
+                        $("#pillOthers").addClass("active");
+                        $("#customAllergyWrapper").css("display", "flex");
+                    }
+
+                    var tagId = "custom_" + Date.now() + Math.floor(Math.random() * 100);
+                    var tagHtml =
+                        '<span class="allergy-pill active" id="' + tagId + '" data-value="Custom:' + escapeHtml(savedName) + '" style="background: #fef2f2; border-color: #ef4444; color: #b91c1c; margin-right: 6px; margin-bottom: 6px;">' +
+                        escapeHtml(savedName) + ' <i class="fa fa-times ms-1" style="cursor:pointer;" onclick="event.stopPropagation(); RemoveCustomAllergyTag(\'' + tagId + '\')"></i>' +
+                        '</span>';
+
+                    $("#customAllergyTags").append(tagHtml);
+                }
+            });
+        },
+        error: function () {
+            console.error("Failed to load allergies from Allergy Master.");
         }
     });
 }

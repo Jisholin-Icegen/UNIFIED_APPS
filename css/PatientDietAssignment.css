@@ -4,11 +4,12 @@
 }
 
 .screen-left-panel {
-/*    height: 100vh;
+    /*    height: 100vh;
     min-height: 2200px;
     position: relative;*/
     z-index: 1000;
 }
+
 .patient-diet-page {
     flex: 1;
     width: 100%;
@@ -18,6 +19,7 @@
     min-height: 100vh;
     overflow-x: hidden;
 }
+
 .top-header {
     height: 82px;
     background: #FFFFFF;
@@ -28,70 +30,85 @@
     padding: 0 28px;
     margin: 0 !important;
 }
+
 .diet-header {
     padding: 28px 36px 0 36px;
     margin: 0 !important;
-   
 }
+
 .diet-filter-bar {
     margin: 20px 36px 0 36px;
 }
+
 .diet-table-wrapper {
     margin: 24px 36px 30px 36px;
 }
+
 .container,
 .container-fluid {
     max-width: 100% !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
 }
+
 body {
     margin: 0 !important;
     padding: 0 !important;
     overflow-x: hidden;
     background: #F4F7FB;
 }
+
 .diet-table tbody tr {
     cursor: pointer;
     transition: all 0.2s ease;
 }
-.diet-table tbody tr:hover td {
+
+    .diet-table tbody tr:hover td {
         background: #F3FDF7 !important;
     }
-.diet-table tbody tr:hover td:first-child {
+
+        .diet-table tbody tr:hover td:first-child {
             border-top-left-radius: 14px;
             border-bottom-left-radius: 14px;
         }
- .diet-table tbody tr:hover td:last-child {
+
+        .diet-table tbody tr:hover td:last-child {
             border-top-right-radius: 14px;
             border-bottom-right-radius: 14px;
         }
+
 .diet-table td {
     transition: all 0.2s ease;
 }
+
 .row,
 .col,
 [class*="col-"] {
     margin-top: 0 !important;
 }
+
 .top-header-right {
     display: flex;
     align-items: center;
     gap: 22px;
 }
+
 .top-user-info {
     text-align: right;
 }
+
 .top-user-name {
     font-size: 16px;
     font-weight: 700;
     color: #0F172A;
 }
+
 .top-user-role {
     font-size: 13px;
     color: #94A3B8;
     margin-top: 2px;
 }
+
 .top-bell-wrap {
     width: 48px;
     height: 48px;
@@ -104,6 +121,7 @@ body {
     color: #64748B;
     font-size: 22px;
 }
+
 .top-bell-badge {
     position: absolute;
     top: 8px;
@@ -119,6 +137,7 @@ body {
     align-items: center;
     justify-content: center;
 }
+
 .top-logout-btn {
     border: none;
     background: transparent;
@@ -129,6 +148,7 @@ body {
     align-items: center;
     gap: 8px;
 }
+
 .top-header {
     height: 78px;
     background: #fff;
@@ -138,6 +158,7 @@ body {
     justify-content: flex-end;
     padding: 0 26px;
 }
+
 .top-header-right {
     display: flex;
     align-items: center;
@@ -525,65 +546,65 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     align-items: center;
 }
 
-    .filter-select {
+.filter-select {
     position: relative;
     width: 100%;
 }
 
-.filter-select .select2-container {
-    width: 100% !important;
-}
+    .filter-select .select2-container {
+        width: 100% !important;
+    }
 
-.filter-select .select2-selection--single {
-    height: 56px !important;
-    border-radius: 16px !important;
-    border: 1px solid #E5E7EB !important;
-    background: #F8FAFC !important;
-    display: flex !important;
-    align-items: center !important;
-    padding: 0 16px !important;
-    transition: all 0.2s ease;
-}
+    .filter-select .select2-selection--single {
+        height: 56px !important;
+        border-radius: 16px !important;
+        border: 1px solid #E5E7EB !important;
+        background: #F8FAFC !important;
+        display: flex !important;
+        align-items: center !important;
+        padding: 0 16px !important;
+        transition: all 0.2s ease;
+    }
 
-.filter-select .select2-selection--single:hover {
-    border-color: #A3A3A3 !important;
-    background: #fff !important;
-}
+        .filter-select .select2-selection--single:hover {
+            border-color: #A3A3A3 !important;
+            background: #fff !important;
+        }
 
-.filter-select .select2-selection__rendered {
-    color: #111827 !important;
-    font-size: 16px !important;
-    font-weight: 500 !important;
-    line-height: 56px !important;
-    padding-left: 0 !important;
-}
+    .filter-select .select2-selection__rendered {
+        color: #111827 !important;
+        font-size: 16px !important;
+        font-weight: 500 !important;
+        line-height: 56px !important;
+        padding-left: 0 !important;
+    }
 
-.filter-select .select2-selection__arrow {
-    height: 56px !important;
-    right: 14px !important;
-}
+    .filter-select .select2-selection__arrow {
+        height: 56px !important;
+        right: 14px !important;
+    }
 
-.filter-select .select2-selection__arrow b {
-    border-color: #9CA3AF transparent transparent transparent !important;
-    border-style: solid !important;
-    border-width: 6px 5px 0 5px !important;
-    transition: transform 0.2s ease;
-}
+        .filter-select .select2-selection__arrow b {
+            border-color: #9CA3AF transparent transparent transparent !important;
+            border-style: solid !important;
+            border-width: 6px 5px 0 5px !important;
+            transition: transform 0.2s ease;
+        }
 
 .select2-container--open .select2-selection__arrow b {
     transform: rotate(180deg);
 }
 
-    .filter-search:hover,
-    .filter-search:focus-within,
-    .filter-field:hover,
-    .filter-field:focus-within,
-    .filter-select:hover,
-    .filter-select:focus-within {
-        background: #ffffff;
-        border: 2px solid #a3a3a3;
-        box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
-    }
+.filter-search:hover,
+.filter-search:focus-within,
+.filter-field:hover,
+.filter-field:focus-within,
+.filter-select:hover,
+.filter-select:focus-within {
+    background: #ffffff;
+    border: 2px solid #a3a3a3;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+}
 
 .filter-search {
     flex: 1;
@@ -856,21 +877,24 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     appearance: none;
     cursor: pointer;
 }
+
 #popupDietWrap {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
     margin: 12px 0;
 }
+
 .diet-item-pill {
     display: inline-flex;
     align-items: center;
-    background-color: #e6f7ef; 
-    border: 1px solid #b7eb8f; 
+    background-color: #e6f7ef;
+    border: 1px solid #b7eb8f;
     border-radius: 50px;
     padding: 3px 12px;
-    color: #135200; 
+    color: #135200;
 }
+
 .diet-item-inner {
     display: flex;
     align-items: center;
@@ -884,12 +908,14 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     font-size: 13px !important;
     font-weight: 500;
 }
+
 .field-error {
     color: #ef4444 !important;
     font-size: 13px;
     margin-top: 5px;
     display: block;
 }
+
 .error-border {
     border: 2px solid #ef4444 !important;
     box-shadow: 0 0 0 2px rgba(239,68,68,.15);
@@ -912,7 +938,7 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
 
 .diet-item-sparkle {
     font-size: 11px;
-    color: #13c2c2; 
+    color: #13c2c2;
     margin-left: 2px;
 }
 
@@ -936,11 +962,12 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
 .current-diet-chip {
     display: inline-flex;
     align-items: center;
-    background-color: #e6f9f0; 
-    border: 1px solid #b7eb8f; 
-    border-radius: 50px; 
+    background-color: #e6f9f0;
+    border: 1px solid #b7eb8f;
+    border-radius: 50px;
     padding: 4px 12px;
-    color: #135200; /
+    color: #135200;
+    /
 }
 
 .chip-body {
@@ -967,7 +994,7 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
 
 .chip-icon-sparkle {
     font-size: 12px;
-    color: #13c2c2; 
+    color: #13c2c2;
     margin-left: 2px;
 }
 
@@ -985,12 +1012,14 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
 }
 
     .chip-remove-btn:hover {
-        color: #ff4d4f; 
+        color: #ff4d4f;
     }
+
 .diet-icon {
     font-size: 12px;
-    color:green;
+    color: green;
 }
+
 .allergy-tags {
     display: flex;
     flex-wrap: wrap;
@@ -1231,6 +1260,7 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     grid-template-columns: repeat(2, 1fr);
     gap: 22px 20px;
 }
+
 .name-country-row {
     grid-column: span 2;
     display: grid;
@@ -1253,10 +1283,11 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
 .name-country-row select {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
-    padding-left: 18px !important; 
+    padding-left: 18px !important;
     padding-right: 18px !important;
     line-height: normal;
 }
+
 .full-width {
     grid-column: span 2;
 }
@@ -1313,15 +1344,17 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
 .allergy-pill {
     padding: 8px 18px;
     border-radius: 30px;
-    border: 1px solid #d7dee7;
-    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
     font-size: 14px;
     font-weight: 600;
     color: #475569;
     user-select: none;
     -webkit-user-select: none;
     cursor: pointer;
+    transition: all 0.18s ease;
 }
+
 .patient-allergy-pill {
     display: inline-block;
     margin-top: 10px;
@@ -1391,11 +1424,25 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     transition: .2s ease;
 }
 
-    .allergy-pill.active {
-        background: #fff1f2;
+    .allergy-pill:hover {
+        background: #fef2f2;
         border-color: #fca5a5;
-        color: #dc2626;
+        color: #b91c1c;
     }
+
+    .allergy-pill.active {
+        background: #fee2e2;
+        border: 1.5px solid #dc2626;
+        color: #991b1b;
+        font-weight: 700;
+        box-shadow: 0 2px 6px rgba(220, 38, 38, 0.16);
+    }
+
+        .allergy-pill.active:hover {
+            background: #fecaca;
+            border-color: #b91c1c;
+            color: #7f1d1d;
+        }
 
 .validation-message {
     color: #ef4444 !important;
@@ -1713,6 +1760,7 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     .btn-save-diet:hover {
         background: #52c69a;
     }
+
 .npo-order-panel {
     margin-top: 18px;
     border: 1px solid #fecaca;
@@ -2116,6 +2164,7 @@ table.ctl00_ContentMaster_GridUser_ctl00_Header thead tr th {
     .npo-table-badge i {
         font-size: 10px;
     }
+
 .npo-banner {
     background-color: #d90404;
     color: #ffffff;
@@ -5288,7 +5337,7 @@ select.form-control {
 }
 
 .fasting-datetime-wrap {
-    display: none; 
+    display: none;
     gap: 15px;
     flex: 1;
     margin-left: 10px;
@@ -5325,7 +5374,7 @@ select.form-control {
 
 
 .fasting-row-full {
-    grid-column: span 2; 
+    grid-column: span 2;
     margin-top: -5px;
     margin-bottom: 5px;
 }
@@ -5362,7 +5411,7 @@ select.form-control {
 }
 
 .fasting-datetime-wrap {
-    display: none; 
+    display: none;
     gap: 15px;
     flex: 1;
     border-left: 1px solid #dce5f0;
@@ -5419,42 +5468,42 @@ select.form-control {
     width: 100%;
 }
 
-.custom-multiselect .multiselect-trigger {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #fff;
-    border: 1px solid #edf1f5;
-    border-radius: 14px;
-    padding: 8px 10px;
-    font-size: 14px;
-    cursor: pointer;
-    min-height: 42px;
-}
-
-    .custom-multiselect .multiselect-trigger .placeholder {
-        color: #64748b;
+    .custom-multiselect .multiselect-trigger {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #fff;
+        border: 1px solid #edf1f5;
+        border-radius: 14px;
+        padding: 8px 10px;
+        font-size: 14px;
+        cursor: pointer;
+        min-height: 42px;
     }
 
-.custom-multiselect .multiselect-menu {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-    z-index: 1050;
-    margin-top: 5px;
-    max-height: 300px;
-    flex-direction: column;
-}
+        .custom-multiselect .multiselect-trigger .placeholder {
+            color: #64748b;
+        }
 
-.custom-multiselect.open .multiselect-menu {
-    display: flex;
-}
+    .custom-multiselect .multiselect-menu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        z-index: 1050;
+        margin-top: 5px;
+        max-height: 300px;
+        flex-direction: column;
+    }
+
+    .custom-multiselect.open .multiselect-menu {
+        display: flex;
+    }
 
 .multiselect-search-wrap {
     padding: 10px;
@@ -5754,7 +5803,6 @@ select.form-control {
     .btn-active {
         width: 100%;
     }
-
 }
 
 
@@ -5850,6 +5898,7 @@ textarea,
 button {
     max-width: 100%;
 }
+
 .user-pill-bar {
     display: flex;
     justify-content: flex-end;
@@ -5915,7 +5964,7 @@ button {
 .btn-edit {
     padding: 6px 12px !important;
     margin-left: 5px;
-    color: #d97706 !important; 
+    color: #d97706 !important;
     background: #fffbeb !important;
     border-color: #fcd34d !important;
 }
@@ -5929,3 +5978,44 @@ button {
     .btn-edit i {
         font-size: 14px;
     }
+
+
+
+#admitAllergyMultiselect .multiselect-trigger {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    min-height: 48px;
+    background: #f8fafc;
+    border: 1px solid #edf1f5;
+    border-radius: 14px;
+}
+
+    #admitAllergyMultiselect .multiselect-trigger:hover {
+        border-color: #00a86b;
+        background: #ffffff;
+    }
+
+.selected-allergy-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #dc2626;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+    .selected-allergy-chip .remove-chip {
+        cursor: pointer;
+        font-weight: 700;
+        line-height: 1;
+        padding-left: 2px;
+    }
+
+        .selected-allergy-chip .remove-chip:hover {
+            color: #991b1b;
+        }

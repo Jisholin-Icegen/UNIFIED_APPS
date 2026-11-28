@@ -49,14 +49,10 @@
                 $('#ddlCountryFilter').SumoSelect();
                 LoadCountryDropdowns();
                 $('#ddlDietType').SumoSelect();
-
-
-
                 LoadDietTypeDropdown();
+                LoadAllergenDropdown();
                 LoadServingTimings();
                 LoadCategories();
-
-
                 initModalSelects();
                 $('.menu-input').on('keypress', function (e) { if (e.which == 13) e.preventDefault(); });
                 var userName = sessionStorage.getItem('NAME') || '';
@@ -112,7 +108,7 @@
         <asp:HiddenField ID="HFServingCode" runat="server" ClientIDMode="Static" />
         <asp:HiddenField ID="HFDWSearchQuery" runat="server" ClientIDMode="Static" />
         <asp:HiddenField ID="hdnDeleteMenuId" runat="server" ClientIDMode="Static" />
-        
+
         <style>
             @keyframes tutorialBlink {
                 0%, 100% {
@@ -125,7 +121,7 @@
                     transform: scale(1.25);
                 }
             }
-            
+
             /* modal styles live in ../css/MenuMaster.css */
         </style>
 
@@ -683,11 +679,16 @@
                                                         <div class="form-section">
                                                             <h6 class="section-title">Nutritional Information</h6>
                                                             <div class="nutri-grid">
-                                                                <div><label>Protein (g)</label><input type="number" id="txtProtein" class="form-control menu-input" placeholder="3.4" step="0.1" min="0" /></div>
-                                                                <div><label>Carbs (g)</label><input type="number" id="txtCarbs" class="form-control menu-input" placeholder="19.8" step="0.1" min="0" /></div>
-                                                                <div><label>Fat (g)</label><input type="number" id="txtTotalFat" class="form-control menu-input" placeholder="1.6" step="0.1" min="0" /></div>
-                                                                <div><label>Sodium (mg)</label><input type="number" id="txtSodium" class="form-control menu-input" placeholder="135" step="1" min="0" /></div>
-                                                                <div><label>Sugar (g)</label><input type="number" id="txtSugar" class="form-control menu-input" placeholder="0.4" step="0.1" min="0" /></div>
+                                                                <div>
+                                                                    <label>Protein (g)</label><input type="number" id="txtProtein" class="form-control menu-input" placeholder="3.4" step="0.1" min="0" /></div>
+                                                                <div>
+                                                                    <label>Carbs (g)</label><input type="number" id="txtCarbs" class="form-control menu-input" placeholder="19.8" step="0.1" min="0" /></div>
+                                                                <div>
+                                                                    <label>Fat (g)</label><input type="number" id="txtTotalFat" class="form-control menu-input" placeholder="1.6" step="0.1" min="0" /></div>
+                                                                <div>
+                                                                    <label>Sodium (mg)</label><input type="number" id="txtSodium" class="form-control menu-input" placeholder="135" step="1" min="0" /></div>
+                                                                <div>
+                                                                    <label>Sugar (g)</label><input type="number" id="txtSugar" class="form-control menu-input" placeholder="0.4" step="0.1" min="0" /></div>
                                                             </div>
                                                             <label class="mt-2">Ingredients</label>
                                                             <textarea id="txtIngredients" class="form-control menu-textarea" rows="2" placeholder="e.g., low-fat milk, whole wheat bread, avocado..."></textarea>
@@ -719,6 +720,7 @@
                                         </div>
                                     </div>
 
+                                    <!-- ============ RIGHT PANEL (compact) ============ -->
                                     <!-- ============ RIGHT PANEL (compact) ============ -->
                                     <div class="panel-right">
                                         <div class="menu-card">
@@ -758,17 +760,7 @@
                                                     <div class="row g-2">
                                                         <div class="col-6">
                                                             <h6 class="section-title">Allergens</h6>
-                                                            <select id="ddlAllergens" class="form-control" multiple>
-                                                                <option value="dairy">Dairy</option>
-                                                                <option value="gluten">Gluten</option>
-                                                                <option value="nuts">Nuts</option>
-                                                                <option value="peanuts">Peanuts</option>
-                                                                <option value="soy">Soy</option>
-                                                                <option value="eggs">Eggs</option>
-                                                                <option value="fish">Fish</option>
-                                                                <option value="shellfish">Shellfish</option>
-                                                                <option value="sesame">Sesame</option>
-                                                            </select>
+                                                           <select id="ddlAllergens" class="form-control" multiple></select>
                                                         </div>
                                                         <div class="col-6">
                                                             <h6 class="section-title">Food Tags</h6>
@@ -788,11 +780,11 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div class="menu-card menu-card-footer">
-                                            <button type="button" class="btn-cancel" data-bs-dismiss="modal">✕&nbsp; Cancel</button>
-                                            <button type="button" id="btnCreateMenu" class="btn-create" onclick="CreateMenuItem();">Save menu item</button>
+                                            <div class="menu-card-footer">
+                                                <button type="button" class="btn-cancel" data-bs-dismiss="modal">✕&nbsp; Cancel</button>
+                                                <button type="button" id="btnCreateMenu" class="btn-create" onclick="CreateMenuItem();">Save menu item</button>
+                                            </div>
                                         </div>
                                     </div>
 

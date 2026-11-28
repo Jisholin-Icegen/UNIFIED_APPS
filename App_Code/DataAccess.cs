@@ -1583,6 +1583,9 @@ public class DataAccess
         }
         return dt;
     }
+
+
+
     public static DataTable GetFoodOrderingFlag()
     {
         DataTable dt = new DataTable();
@@ -1610,7 +1613,39 @@ public class DataAccess
         return dt;
     }
 
+    public static DataTable ManageAllergyMaster(string action, string allergyCode, string allergyName, string isActive, string searchText, string showInactive)
+    {
+        DataTable dt = new DataTable();
+        string connString = Tenant.ConnectionString;
+        using (SqlConnection Con = new SqlConnection(connString))
+        {
+            try
+            {
 
+                SqlCommand cmd = new SqlCommand("SP_AllergyMaster", Con);
+                cmd.CommandType = CommandType.StoredProcedure;
+                cmd.Parameters.AddWithValue("@ACTION", action);
+                cmd.Parameters.AddWithValue("@ALLERGYCODE", allergyCode);
+                cmd.Parameters.AddWithValue("@ALLERGYNAME", allergyName);
+                cmd.Parameters.AddWithValue("@ISACTIVE", isActive);
+                cmd.Parameters.AddWithValue("@SEARCHTEXT", searchText);
+                cmd.Parameters.AddWithValue("@SHOWINACTIVE", showInactive);
+                SqlDataAdapter da = new SqlDataAdapter(cmd);
+                da.Fill(dt);
+            }
+            catch (Exception ex)
+            {
+                InsertError(ex.Message, "SP_AllergyMaster");
+                dt = new DataTable();
+            }
+            finally
+            {
+                if (Con.State == ConnectionState.Open) { Con.Close(); }
+            }
+        }
+
+        return dt;
+    }
 
     public static DataTable InsertUpdatePatientDietAssignment(string PatientName, string RoomNumber, string CountryId, string Bed, string Ward, string Doctor, string Age, string Gender, string DietType, string Allergies, string MedicalNotes, string DietaryNotes, string IsIsolation, string IsolationReason, string IsActive, string Action, string ID, string IsUrgentDiet)
     {

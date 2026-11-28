@@ -1,13 +1,9 @@
-﻿/* =====================================================================
-   MenuMaster.js
-   Section 1 : Menu master (grid, filters, single 2-panel add/edit modal)
-   ===================================================================== */
+﻿
 
-var COUNTRY_MAP = {};                     // lower-case country name -> id (used by Excel import)
-var MODAL_ID = 'menuItemBasicModal';      // the one and only add/edit modal
+var COUNTRY_MAP = {};                    
+var MODAL_ID = 'menuItemBasicModal';      
 var MULTI_SELECTS = ['ddlAllowedDietTypes', 'ddlAllergens', 'ddlFoodTags'];
 
-/* ---------- small helpers ---------- */
 function getMulti(id) {
     return $('#' + id).val() || [];
 }
@@ -23,7 +19,7 @@ function initModalSelects() {
     $.each(MULTI_SELECTS, function (i, id) {
         var el = document.getElementById(id);
         if (el && !el.sumo) {
-            $(el).SumoSelect({ csvDispCount: 3, search: true, searchText: 'Search...', placeholder: 'Select...', forceCustomRendering: true });
+            $(el).SumoSelect({ csvDispCount: 3, search: true, searchText: 'Search...', placeholder: 'Select...' });
         }
     });
 }
@@ -36,9 +32,8 @@ function isBadNumber(v) {
     return v !== '' && (isNaN(v) || parseFloat(v) < 0);
 }
 
-/* Role label shown in the top-right profile chip.
-   Login pages store it under different keys, so try all common ones. */
-var ROLE_NAME_BY_ID = {};   // optional: e.g. { 14: 'Dietitian' }
+
+var ROLE_NAME_BY_ID = {};  
 
 function GetUserRoleName() {
     var keys = ['ROLENAME', 'ROLE_NAME', 'RoleName', 'ROLEDESC', 'USERROLE', 'USERTYPE', 'UTYPE', 'ROLETYPE'];
@@ -50,7 +45,6 @@ function GetUserRoleName() {
             if (v && v.toString().trim() !== '' && isNaN(v)) return v.toString().trim();
         }
     }
-    // last resort: any storage key that contains "ROLE" and holds a text value
     for (i = 0; i < stores.length; i++) {
         try {
             for (j = 0; j < stores[i].length; j++) {
@@ -66,7 +60,6 @@ function GetUserRoleName() {
     return ROLE_NAME_BY_ID[id] || '';
 }
 
-/* Build the encrypted service URL for INSERT / UPDATE / DELETE */
 function buildMenuUrl(fields, action, id) {
     var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("INSERTUPDATEMENUITEM"));
     $.each(fields || {}, function (k, v) {
@@ -77,7 +70,6 @@ function buildMenuUrl(fields, action, id) {
     return url;
 }
 
-/* ---------- misc old handlers ---------- */
 $(document).on("change", ".meal-chip input[type='checkbox']", function () {
     if ($(this).is(":checked")) {
         $(".meal-chip input[type='checkbox']").not(this).prop("checked", false).closest(".meal-chip").removeClass("checked");
@@ -91,7 +83,6 @@ $(document).on("change", "input[name='MealType']", function () {
     if ($(this).is(":checked")) { $("input[name='MealType']").not(this).prop("checked", false); }
 });
 
-/* ---------- dropdown loaders ---------- */
 function LoadDietTypeDropdown() {
     var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETDIETTYPEDROPDOWN"));
 
@@ -121,6 +112,41 @@ function LoadDietTypeDropdown() {
     });
 }
 
+function LoadAllergenDropdown() {
+    var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("ALLERGYMASTER")) +
+        "&ACTION=" + encodeURIComponent(Encrypt("GETLIST")) +
+        "&SEARCHTEXT=" + encodeURIComponent(Encrypt("")) +
+        "&SHOWINACTIVE=" + encodeURIComponent(Encrypt("0"));
+
+    $.ajax({
+        url: url,
+        type: "GET",
+        dataType: "json",
+        success: function (res) {
+            var list = Array.isArray(res)
+                ? res
+                : (res && res.Tables && res.Tables[0] && res.Tables[0].Rows ? res.Tables[0].Rows : []);
+
+            var modalHtml = '';
+            $.each(list, function (i, item) {
+                var isActive = item.ISACTIVE === undefined || item.ISACTIVE === true || item.ISACTIVE == 1;
+                if (!isActive) return;
+
+                var allergyName = (item.AllergyName || item.ALLERGYNAME || item.NAME || "").trim();
+                if (!allergyName) return;
+
+                modalHtml += '<option value="' + escapeHtml(allergyName.toLowerCase()) + '">' + escapeHtml(allergyName) + '</option>';
+            });
+
+            var keep = getMulti('ddlAllergens');
+            $("#ddlAllergens").html(modalHtml);
+            setMulti('ddlAllergens', keep);
+        },
+        error: function (xhr, status, error) {
+            console.error("Error loading allergy master list:", error);
+        }
+    });
+}
 function LoadCountryDropdowns() {
     var url = hurl + "Service/Service.aspx?Process=" + encodeURIComponent(Encrypt("GETCOUNTRIES"));
     $.ajax({
@@ -200,12 +226,10 @@ function LoadCategories() {
     });
 }
 
-/* ---------- save / update / delete ---------- */
 function CreateMenuItem(ActionType) {
     var Id = $("#hdnMenuId").val();
     var Action = ActionType || (Id ? "UPDATE" : "INSERT");
 
-    /* ---- delete (soft) ---- */
     if (Action == "DELETE") {
         $.ajax({
             url: buildMenuUrl({}, "DELETE", Id),
@@ -231,7 +255,6 @@ function CreateMenuItem(ActionType) {
         return false;
     }
 
-    /* ---- gather ---- */
     var MenuName = ($("#txtMenuName").val() || "").trim();
     var AllowedDietTypes = getMulti('ddlAllowedDietTypes');
     var ServingCodes = [];
@@ -239,7 +262,6 @@ function CreateMenuItem(ActionType) {
         ServingCodes.push($(this).val());
     });
 
-    /* ---- validate ---- */
     var isValid = true;
     $("#errMenuName, #errDietType").removeClass("show").hide();
     $("#txtMenuName").removeClass("error-border");
@@ -273,7 +295,6 @@ function CreateMenuItem(ActionType) {
         return false;
     }
 
-    /* ---- send ---- */
     var fields = {
         FOODNAME: MenuName,
         DESCRIPTION: ($("#txtDescription").val() || "").trim(),
@@ -331,8 +352,6 @@ function CreateMenuItem(ActionType) {
 
 function ClearMenuItem() {
     $("#hdnMenuId").val("");
-
-    /* left panel */
     $("#txtMenuName, #txtDescription, #txtCalories, #txtPrice, #txtHISID, #txtVendor, #txtImageUrl").val('');
     $("#ddlDietaryType").val('');
     $("#ddlModalCountry").prop('selectedIndex', 0);
@@ -341,20 +360,15 @@ function ClearMenuItem() {
     }
     $("#chkActive").prop('checked', true);
     $("#chkDefaultOrder").prop('checked', false);
-
-    /* right panel */
     $("#txtProtein, #txtCarbs, #txtTotalFat, #txtSodium, #txtSugar, #txtIngredients").val('');
     $("#ddlCategory").val('');
     $("#ddlDay").val('0');
     $("#servingTimingList input[type='checkbox']").prop('checked', false);
     $.each(MULTI_SELECTS, function (i, id) { setMulti(id, []); });
-
-    /* validation */
     $("#errMenuName, #errDietType").hide();
     $("#menuItemBasicModal .error-border").removeClass("error-border");
 }
 
-/* ---------- list ---------- */
 function LoadMenuTypes() {
     var SearchText = ($("#txtSearch").val() || "").trim();
     var Servingcode = $("#HFServingCode").val();
@@ -490,7 +504,6 @@ function ConfirmDeleteMenu() {
     $("#deleteMenuModal").modal("hide");
 }
 
-/* ---------- open modal: new / edit ---------- */
 function OpenNewMenuItem() {
     ClearMenuItem();
     $("#BasicModalHeader").text("New menu item");
@@ -522,8 +535,6 @@ function GetMenuTypeById(ID) {
         success: function (res) {
             if (!res || res.length == 0) return;
             var item = res[0];
-
-            /* left panel */
             $("#txtMenuName").val(item.FOODNAME);
             $("#txtDescription").val(item.DESCRIPTION);
             $("#txtCalories").val(item.CALORIES || '');
@@ -544,7 +555,6 @@ function GetMenuTypeById(ID) {
                 }
             }, 150);
 
-            /* right panel */
             $("#txtProtein").val(item.PROTEIN || '');
             $("#txtCarbs").val(item.CARBS || '');
             $("#txtTotalFat").val(item.TOTALFAT || '');
@@ -570,7 +580,6 @@ function GetMenuTypeById(ID) {
     });
 }
 
-/* ---------- filter events ---------- */
 $(document).on('change', '#ddlCountryFilter', function () {
     LoadMenuTypes();
 });
@@ -596,9 +605,7 @@ $(document).on("click", "#btnInactive", function () {
     LoadMenuTypes();
 });
 
-/* =====================================================================
-   Section 2 : Food-order popup (unchanged)
-   ===================================================================== */
+
 var psCurrentPage = 1;
 var psRowsPerPage = 10;
 var psAllFeedback = [];
