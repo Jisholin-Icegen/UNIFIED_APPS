@@ -3,24 +3,40 @@
   "WorkspaceRootPath": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\controllers\\aibridgecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\controllers\\aibridgecontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\wwwroot\\js\\voice-agent\\script.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\voice-agent\\script.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\logisitics\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
-      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\logisitics\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\fooddining\\revieworder.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\fooddining\\revieworder.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\roomcomfort\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
-      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\roomcomfort\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\wwwroot\\js\\food.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\food.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\shared\\_footer.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
-      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\shared\\_footer.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\fooddining\\ordersuccess.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\fooddining\\ordersuccess.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\wwwroot\\js\\unified-ai-host.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}",
       "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\js\\unified-ai-host.js||{14D17961-FE51-464D-9111-C4AF11D7D99A}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\home\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\home\\index.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\wwwroot\\css\\unified-ai.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\css\\unified-ai.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\views\\fooddining\\menuitems.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\views\\fooddining\\menuitems.cshtml||{40D31677-CBC0-4297-A9EF-89D907823A98}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|d:\\project\\unified ai - exp\\jisholin-fix-unified-ai-websocket\\dial50_mvc_core\\wwwroot\\css\\food.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}",
+      "RelativeMoniker": "D:0:0:{0593005A-50DE-40C9-945F-67DB2F2373F0}|Dial50_MVC_Core\\Dial50_MVC_Core.csproj|solutionrelative:dial50_mvc_core\\wwwroot\\css\\food.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,7 +46,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 5,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Bookmark",
@@ -43,27 +59,66 @@
             {
               "$type": "Document",
               "DocumentIndex": 1,
-              "Title": "Index.cshtml",
-              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Logisitics\\Index.cshtml",
-              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\Logisitics\\Index.cshtml",
-              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Logisitics\\Index.cshtml",
-              "RelativeToolTip": "Dial50_MVC_Core\\Views\\Logisitics\\Index.cshtml",
-              "ViewState": "AgIAACACAAAAAAAAAAAAADECAAAeAAAAAAAAAA==",
+              "Title": "ReviewOrder.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\FoodDining\\ReviewOrder.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\FoodDining\\ReviewOrder.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\FoodDining\\ReviewOrder.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\FoodDining\\ReviewOrder.cshtml",
+              "ViewState": "AgIAACUBAAAAAAAAAAAiwEABAAAhAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
-              "WhenOpened": "2026-11-27T13:05:14.613Z",
+              "WhenOpened": "2026-11-28T07:43:16.627Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Food.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\Food.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\Food.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\Food.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\Food.js",
+              "ViewState": "AgIAAE0GAAAAAAAAAAAiwG8GAAAFAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-28T07:43:04.6Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 3,
-              "Title": "_footer.cshtml",
-              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
-              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
-              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
-              "RelativeToolTip": "Dial50_MVC_Core\\Views\\Shared\\_footer.cshtml",
-              "ViewState": "AgIAADECAAAAAAAAAADwv04CAAAJAAAAAAAAAA==",
+              "Title": "OrderSuccess.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\FoodDining\\OrderSuccess.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\FoodDining\\OrderSuccess.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\FoodDining\\OrderSuccess.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\FoodDining\\OrderSuccess.cshtml",
+              "ViewState": "AgIAAMACAAAAAAAAAAAAAM8CAAAJAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
-              "WhenOpened": "2026-11-27T12:23:52.166Z",
+              "WhenOpened": "2026-11-28T07:41:40.614Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "Index.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\Home\\Index.cshtml",
+              "ViewState": "AgIAAC4NAAAAAAAAAAAAAEENAABjAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
+              "WhenOpened": "2026-11-28T07:10:34.073Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "script.js",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\voice-agent\\script.js",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\voice-agent\\script.js",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\voice-agent\\script.js",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\voice-agent\\script.js",
+              "ViewState": "AgIAAFMFAAAAAAAAAAAAAFMFAAACAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
+              "WhenOpened": "2026-11-28T06:48:02.525Z",
               "EditorCaption": ""
             },
             {
@@ -74,35 +129,48 @@
               "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
               "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
               "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\js\\unified-ai-host.js",
-              "ViewState": "AgIAAHIHAAAAAAAAAAAswI8HAAAFAAAAAAAAAA==",
+              "ViewState": "AgIAAHYIAAAAAAAAAAAswJMIAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001646|",
-              "WhenOpened": "2026-11-27T12:23:34.524Z",
+              "WhenOpened": "2026-11-28T06:46:49.638Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "AiBridgeController.cs",
-              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
-              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
-              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
-              "RelativeToolTip": "Dial50_MVC_Core\\Controllers\\AiBridgeController.cs",
-              "ViewState": "AgIAAO8LAAAAAAAAAAAswPYLAABHAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-11-27T12:16:33.547Z",
+              "DocumentIndex": 8,
+              "Title": "Food.css",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\css\\Food.css",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\css\\Food.css",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\css\\Food.css",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\css\\Food.css",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
+              "WhenOpened": "2026-11-28T06:29:49.396Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "Index.cshtml",
-              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
-              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
-              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
-              "RelativeToolTip": "Dial50_MVC_Core\\Views\\RoomComfort\\Index.cshtml",
-              "ViewState": "AgIAANAAAAAAAAAAAAAAAO8AAAAqAAAAAAAAAA==",
+              "DocumentIndex": 7,
+              "Title": "MenuItems.cshtml",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\FoodDining\\MenuItems.cshtml",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\Views\\FoodDining\\MenuItems.cshtml",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\Views\\FoodDining\\MenuItems.cshtml",
+              "RelativeToolTip": "Dial50_MVC_Core\\Views\\FoodDining\\MenuItems.cshtml",
+              "ViewState": "AgIAAMEBAAAAAAAAAADwv84BAABVAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000759|",
-              "WhenOpened": "2026-11-27T12:31:28.147Z",
+              "WhenOpened": "2026-11-28T06:27:53.93Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "unified-ai.css",
+              "DocumentMoniker": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\css\\unified-ai.css",
+              "RelativeDocumentMoniker": "Dial50_MVC_Core\\wwwroot\\css\\unified-ai.css",
+              "ToolTip": "D:\\PROJECT\\UNIFIED AI - EXP\\jisholin-fix-unified-ai-websocket\\Dial50_MVC_Core\\wwwroot\\css\\unified-ai.css",
+              "RelativeToolTip": "Dial50_MVC_Core\\wwwroot\\css\\unified-ai.css",
+              "ViewState": "AgIAAPkCAAAAAAAAAAAkwBoDAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
+              "WhenOpened": "2026-11-28T06:02:09.044Z",
               "EditorCaption": ""
             }
           ]

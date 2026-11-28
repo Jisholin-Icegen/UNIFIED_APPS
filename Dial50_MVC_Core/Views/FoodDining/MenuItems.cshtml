@@ -451,24 +451,27 @@
         });
 
         function renderPreorderTabs() {
-            const isToday = $("#date-btn-today").hasClass("active");
-            const $container = $("#dynamicMealTabs");
-            $container.empty();
-            let firstValidFound = false;
-            $.each(servingData, function (i, item) {
-                const isFinished = isToday ? isMealFinished(item.endTime) : false;
-                const sanitizedName = item.categoryName.replace(/\s+/g, '_');
-                let activeClass = "";
-                if (!isFinished && !firstValidFound) {
-                    activeClass = "active";
-                    firstValidFound = true;
-                    loadMeal(item.categoryName);
+                    const isToday = $("#date-btn-today").hasClass("active");
+                    const $container = $("#dynamicMealTabs");
+                    $container.empty();
+                    let firstValidFound = false;
+                    $.each(servingData, function (i, item) {
+                        const isActiveNow = isToday && isTimeBetween(item.startTime, item.endTime);
+                        const isFinished = isToday && !isActiveNow && isMealFinished(item.endTime);
+                        const isUnavailableToday = isActiveNow || isFinished;
+                        const statusLabel = isActiveNow ? "AVAILABLE NOW" : (isFinished ? "ENDED" : "");
+                        const sanitizedName = item.categoryName.replace(/\s+/g, '_');
+                        let activeClass = "";
+                        if (!isUnavailableToday && !firstValidFound) {
+                            activeClass = "active";
+                            firstValidFound = true;
+                            loadMeal(item.categoryName);
+                        }
+                        const btnHtml = `<button type="button" class="meal-tab-box ${activeClass} ${isUnavailableToday ? 'not-available is-struck' : ''} ${isActiveNow ? 'is-live-now' : ''}" id="tab-${sanitizedName}" ${isUnavailableToday ? 'disabled aria-disabled="true"' : `onclick="loadMeal('${item.categoryName}')"`}><span class="tab-name" style="font-weight:700;">${item.categoryName}</span>${statusLabel ? `<span class="not-now-text">${statusLabel}</span>` : ''}</button>`;
+                        $container.append(btnHtml);
+                    });
+                    if (!firstValidFound && isToday) setPreorderDate(1);
                 }
-                const btnHtml = `<button type="button" class="meal-tab-box ${activeClass} ${isFinished ? 'not-available' : ''}" id="tab-${sanitizedName}" ${isFinished ? '' : `onclick="loadMeal('${item.categoryName}')"`}><span class="tab-name" style="font-weight:700;">${item.categoryName}</span>${isFinished ? '<span class="not-now-text">NOT NOW</span>' : ''}</button>`;
-                $container.append(btnHtml);
-            });
-            if (!firstValidFound && isToday) setPreorderDate(1);
-        }
 
         function renderInstantPills() {
             const $container = $("#dynamicInstantPills");

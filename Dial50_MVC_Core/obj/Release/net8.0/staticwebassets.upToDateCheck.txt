@@ -21,7 +21,6 @@ wwwroot\css\Room.css
 wwwroot\css\site.css
 wwwroot\css\Tracking.css
 wwwroot\css\unified-ai-transitions.css
-wwwroot\css\unified-ai.css
 wwwroot\css\voice-agent\styles.css
 wwwroot\data\region-language.json
 wwwroot\Default.png
@@ -395,7 +394,6 @@ wwwroot\js\video-ai\config.js
 wwwroot\js\video-ai\video-script.js
 wwwroot\js\voice-agent\config.example.js
 wwwroot\js\voice-agent\config.js
-wwwroot\js\voice-agent\script.js
 wwwroot\lib\bootstrap\dist\css\bootstrap-grid.css
 wwwroot\lib\bootstrap\dist\css\bootstrap-grid.css.map
 wwwroot\lib\bootstrap\dist\css\bootstrap-grid.min.css
@@ -472,4 +470,6 @@ wwwroot\Mydailycarevideos\Eye Checkup.mp4
 wwwroot\Mydailycarevideos\Health.mp4
 wwwroot\Mydailycarevideos\Machine.mp4
 wwwroot\sw.js
+wwwroot\css\unified-ai.css
 wwwroot\js\unified-ai-host.js
+wwwroot\js\voice-agent\script.js

@@ -1,15 +1,12 @@
 ﻿@model BedInfo
 @{
     ViewData["Title"] = ":: My Daily Care ::";
-    ViewData["UseVideoAssistant"] = true;
     var isUnifiedAIFrame = Context.Request.Query["UnifiedAI"] == "1"
         || Context.Request.Query["Unified"] == "1";
 }
 
 <link rel="stylesheet" href="~/css/DailyCare.css">
 <link rel="stylesheet" href="~/fontawesome/css/all.min.css" />
-
-<script src="~/js/video-ai/config.js"></script>
 
 <link rel="stylesheet" href="~/css/voice-agent/styles.css" asp-append-version="true">
 
@@ -104,7 +101,6 @@
         min-height: 0 !important;
     }
 
-        /* Reset direct grid children */
         #pageContent > * {
             grid-column: auto !important;
             width: 100% !important;
@@ -115,7 +111,6 @@
             box-sizing: border-box !important;
         }
 
-        /* Equal square cards */
         #pageContent .card {
             width: 100% !important;
             height: auto !important;
@@ -137,7 +132,6 @@
             overflow: hidden !important;
         }
 
-            /* Card icon */
             #pageContent .card .icon-box {
                 width: 56px !important;
                 height: 56px !important;
@@ -158,7 +152,6 @@
                     object-fit: contain !important;
                 }
 
-            /* Card title (Increased Size) */
             #pageContent .card h3 {
                 width: 100% !important;
                 margin: 0 0 6px !important;
@@ -191,8 +184,8 @@
                 filter: none !important;
                 pointer-events: auto !important;
                 cursor: pointer !important;
-                border: 1px solid #d1d5db !important; /* Soft grey border */
-                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08) !important; /* Deeper grey shadow */
+                border: 1px solid #d1d5db !important;
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08) !important;
             }
 
                 #pageContent .card.focused .icon-box {
@@ -203,7 +196,6 @@
                         filter: brightness(0) invert(1) !important;
                     }
 
-            /* Disabled card */
             #pageContent .card.faded {
                 opacity: .55 !important;
                 filter: grayscale(.3) !important;
@@ -323,480 +315,6 @@
         color: #ffffff;
     }
 
-    html[data-autostart="pending"] .app-wrapper > *:not(#autoStartLoader) {
-        visibility: hidden !important;
-        opacity: 0 !important;
-    }
-
-    #autoStartLoader {
-        display: none;
-        position: fixed;
-        inset: 0;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        gap: 16px;
-        background: #f1f3f7;
-        z-index: 100002;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-
-    html[data-autostart="pending"] #autoStartLoader {
-        display: flex !important;
-    }
-
-    #autoStartLoader .spinner {
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        border: 3px solid #e2e8f0;
-        border-top-color: #6366f1;
-        animation: autostartSpin 0.8s linear infinite;
-    }
-
-    #autoStartLoader .lbl {
-        font-size: 15px;
-        font-weight: 600;
-        color: #475569;
-    }
-
-    @@keyframes autostartSpin {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    #interactiveCard {
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        background: transparent !important;
-        border-radius: 0 !important;
-    }
-
-    .idle-layer {
-        width: 100% !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        display: block !important;
-    }
-
-    .grace-idle {
-        width: 100% !important;
-        height: auto !important;
-        margin: 0 0 8px 0 !important;
-        padding: 22px 16px 26px 16px !important;
-        box-sizing: border-box !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-        background: linear-gradient(135deg, #6366f1, #7c3aed) !important;
-        border-radius: 20px !important;
-        border: none !important;
-        outline: none !important;
-        box-shadow: none !important;
-        overflow: visible !important;
-        gap: 0 !important;
-    }
-
-        .grace-idle * {
-            box-sizing: border-box !important;
-        }
-
-    .grace-idle-desc {
-        order: 1 !important;
-        width: 100% !important;
-        margin: 0 0 18px 0 !important;
-        padding: 0 !important;
-        text-align: center !important;
-        color: #ffffff !important;
-        font-size: 17px !important;
-        font-weight: 700 !important;
-        line-height: 1.35 !important;
-    }
-
-    .grace-idle-btn {
-        order: 2 !important;
-        position: relative !important;
-        width: 154px !important;
-        height: 154px !important;
-        margin: 0 auto !important;
-        padding: 0 !important;
-        background: transparent !important;
-        border: none !important;
-        outline: none !important;
-        box-shadow: none !important;
-        cursor: pointer !important;
-        display: block !important;
-        line-height: 0 !important;
-    }
-
-    .grace-idle-avatar {
-        width: 154px !important;
-        height: 154px !important;
-        position: relative !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        border-radius: 50% !important;
-        overflow: hidden !important;
-        background: transparent !important;
-        border: 4px solid #ffffff !important;
-        box-shadow: none !important;
-        display: block !important;
-    }
-
-        .grace-idle-avatar img {
-            width: 100% !important;
-            height: 100% !important;
-            display: block !important;
-            object-fit: cover !important;
-            object-position: center !important;
-        }
-
-    .grace-idle-pill {
-        position: absolute !important;
-        left: 50% !important;
-        bottom: 17px !important;
-        transform: translateX(-50%) !important;
-        z-index: 10 !important;
-        height: 38px !important;
-        padding: 0 17px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        white-space: nowrap !important;
-        color: #ffffff !important;
-        font-size: 14px !important;
-        font-weight: 700 !important;
-        line-height: 1 !important;
-        background: rgba(69, 42, 139, 0.78) !important;
-        border: 1.5px solid rgba(255, 255, 255, 0.42) !important;
-        border-radius: 22px !important;
-    }
-
-    .grace-idle-btn:active {
-        transform: scale(0.98) !important;
-    }
-
-    .grace-idle-btn:focus {
-        outline: none !important;
-    }
-
-    #interactiveCard {
-        display: none !important;
-    }
-
-    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) {
-        height: 100vh !important;
-        height: 100dvh !important;
-        overflow: hidden !important;
-    }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper {
-            height: 100vh !important;
-            height: 100dvh !important;
-            max-height: 100vh !important;
-            max-height: 100dvh !important;
-            overflow: hidden !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            transform: none !important;
-        }
-
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > header,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > #header,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > .header,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > .app-header,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > footer,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > #footer,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > .footer,
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > .assistant-titlebar {
-                flex-shrink: 0 !important;
-            }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #pageNav,
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #pageContent,
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .idle-layer {
-            display: none !important;
-        }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #assistantTitlebar {
-            display: flex !important;
-            align-items: center !important;
-            position: relative !important;
-            width: 100% !important;
-            height: 40px !important;
-            min-height: 40px !important;
-            background: #ffffff !important;
-            flex-shrink: 0 !important;
-        }
-
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #assistantTitlebar .assistant-title {
-                color: #000000 !important;
-            }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #interactiveCard {
-            position: relative !important;
-            inset: auto !important;
-            display: flex !important;
-            flex-direction: column !important;
-            width: 100% !important;
-            flex: 1 1 auto !important;
-            height: auto !important;
-            min-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            box-sizing: border-box !important;
-            overflow: hidden !important;
-            background: #0f172a !important;
-            border-radius: 0 !important;
-            z-index: 1 !important;
-            contain: layout paint; /* status/title updates repaint only this card */
-        }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #callLayer {
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 0 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            box-sizing: border-box !important;
-            padding: 20px 16px !important;
-            overflow: hidden !important;
-            background: #0f172a !important;
-        }
-
-    #interactiveCard .call-layer .call-rings .call-avatar,
-    #interactiveCard .call-layer .call-avatar {
-        position: absolute !important;
-        left: auto !important;
-        top: auto !important;
-        right: 22px !important;
-        bottom: 22px !important;
-        transform: none !important;
-        width: 62px !important;
-        height: 62px !important;
-        border-radius: 50% !important;
-        background: #ffffff !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        overflow: hidden !important;
-        z-index: 6 !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
-    }
-
-    #interactiveCard .call-layer .call-avatar-icon {
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: cover !important;
-        filter: none !important;
-        opacity: 1 !important;
-        border-radius: 50% !important;
-    }
-
-    body[data-state="ended"] .call-avatar,
-    body[data-state="ended"] .call-layer .call-avatar,
-    body[data-state="ended"] .call-rings .call-avatar {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-
-    .call-rings {
-        width: min(55vw, 220px);
-        height: min(55vw, 220px);
-        max-width: 220px;
-        max-height: 220px;
-    }
-
-    .call-title {
-        margin-top: 28px !important;
-        font-size: clamp(20px, 5vw, 28px) !important;
-        text-align: center;
-    }
-
-    .call-status-row {
-        margin-top: 8px !important;
-    }
-
-    .call-controls {
-        margin-top: 28px !important;
-    }
-
-    .hangup-btn {
-        margin-top: 24px !important;
-    }
-
-    @@media (max-width: 480px) {
-        .grace-idle {
-            padding: 20px 14px 24px 14px !important;
-        }
-
-        .grace-idle-desc {
-            font-size: 16px !important;
-            margin-bottom: 16px !important;
-        }
-
-        .grace-idle-btn,
-        .grace-idle-avatar {
-            width: 140px !important;
-            height: 140px !important;
-        }
-
-        .grace-idle-pill {
-            bottom: 14px !important;
-            height: 34px !important;
-            padding: 0 15px !important;
-            font-size: 13px !important;
-        }
-    }
-
-    @@media (max-height: 650px) {
-        .call-rings {
-            width: 160px !important;
-            height: 160px !important;
-        }
-
-        .call-title {
-            margin-top: 16px !important;
-            font-size: 20px !important;
-        }
-
-        .call-controls {
-            margin-top: 16px !important;
-        }
-
-        .hangup-btn {
-            margin-top: 12px !important;
-        }
-    }
-
-    @@media (min-height: 800px) {
-        .call-rings {
-            width: 210px !important;
-            height: 210px !important;
-        }
-
-        .call-controls {
-            margin-top: 32px !important;
-        }
-
-        .hangup-btn {
-            margin-top: 28px !important;
-        }
-    }
-
-    .hangup-btn .end-call-icon,
-    #endChatBtn img {
-        filter: brightness(0) invert(1) !important;
-        opacity: 1 !important;
-    }
-
-    .control-btn#micBtn,
-    .control-btn.speaker-btn {
-        position: relative !important;
-        width: 56px !important;
-        height: 56px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 50% !important;
-        background: linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03)) !important;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.20), 0 2px 6px rgba(0,0,0,0.3) !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        cursor: pointer !important;
-        box-sizing: border-box !important;
-    }
-
-        .control-btn#micBtn .control-icon,
-        .control-btn.speaker-btn .control-icon {
-            width: 24px !important;
-            height: 24px !important;
-            object-fit: contain !important;
-            display: block !important;
-            filter: brightness(0) invert(1) !important;
-            opacity: 1 !important;
-        }
-
-        .control-btn#micBtn.muted::after,
-        .control-btn.speaker-btn.muted::after {
-            content: "" !important;
-            position: absolute !important;
-            width: 34px !important;
-            height: 3px !important;
-            background: linear-gradient(90deg, rgba(39,157,148,0), #279d94 15%, #2ee0d2 50%, #279d94 85%, rgba(39,157,148,0)) !important;
-            border-radius: 3px !important;
-            transform: rotate(-45deg) !important;
-            pointer-events: none !important;
-            z-index: 3 !important;
-            box-shadow: 0 0 6px rgba(46,224,210,0.6) !important;
-        }
-
-    #interactiveCard .ended-layer .ended-avatar-container {
-        width: 100px !important;
-        height: 100px !important;
-        min-width: 100px !important;
-        min-height: 100px !important;
-        max-width: 100px !important;
-        max-height: 100px !important;
-        border-radius: 50% !important;
-        background: #ffffff !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        overflow: hidden !important;
-        position: relative !important;
-        left: auto !important;
-        top: auto !important;
-        right: auto !important;
-        bottom: auto !important;
-        transform: none !important;
-        z-index: 5 !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
-    }
-
-    #interactiveCard .ended-layer .ended-avatar-icon-img {
-        width: 100% !important;
-        height: 100% !important;
-        min-width: 100% !important;
-        min-height: 100% !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-        object-fit: cover !important;
-        object-position: center !important;
-        display: block !important;
-        filter: none !important;
-        opacity: 1 !important;
-        transform: none !important;
-        margin: 0 !important;
-        border-radius: 50% !important;
-    }
-
-    body[data-state="ended"] #callLayer,
-    body[data-state="ended"] .call-layer {
-        display: none !important;
-    }
-
-    body:is([data-state="connecting"], [data-state="connected"]) #callLayer,
-    body:is([data-state="connecting"], [data-state="connected"]) #callLayer *,
-    body:is([data-state="connecting"], [data-state="connected"]) #callLayer *::before,
-    body:is([data-state="connecting"], [data-state="connected"]) #callLayer *::after {
-        animation: none !important;
-        text-shadow: none !important;
-    }
-
     .video-overlay {
         position: fixed;
         inset: 0;
@@ -875,9 +393,6 @@
         flex-shrink: 0;
     }
 
-    /* =====================================================
-               REQUEST SUCCESS MODAL
-               ===================================================== */
     .modal-overlay {
         position: fixed;
         top: 0;
@@ -1223,7 +738,6 @@
         animation: loadingModalIn 0.25s ease-out;
     }
 
-        /* Subtle geometric background */
         .request-loading-modal::before {
             content: "";
             position: absolute;
@@ -1235,7 +749,6 @@
             background-position: 0 0, 0 0, 40px 70px, 40px 70px, 0 0;
         }
 
-    /* Icon area */
     .loading-icon-wrapper {
         position: relative;
         width: 130px;
@@ -1247,7 +760,6 @@
         z-index: 2;
     }
 
-    /* Light circular background */
     .loading-icon-circle {
         width: 108px;
         height: 108px;
@@ -1260,13 +772,11 @@
         z-index: 2;
     }
 
-        /* Wrench */
         .loading-icon-circle i {
             color: #009f94;
             font-size: 42px;
         }
 
-    /* Animated rings */
     .loading-ring {
         position: absolute;
         width: 124px;
@@ -1345,105 +855,6 @@
             max-width: 340px;
             min-height: 340px;
         }
-    }
-
-    /* ============================================================
-               FULLSCREEN CALL MODE
-               ============================================================ */
-    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) {
-        width: 100vw !important;
-        height: 100vh !important;
-        height: 100dvh !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        justify-content: flex-start !important;
-        background: #0f172a !important;
-    }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper {
-            width: 100% !important;
-            height: 100% !important;
-            max-width: none !important;
-            min-width: 0 !important;
-            min-height: 0 !important;
-            max-height: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            overflow: hidden !important;
-            display: flex !important;
-            flex-direction: column !important;
-            background: #0f172a !important;
-        }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #pageContent {
-            display: none !important;
-        }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #interactiveCard {
-            flex: 1 1 auto !important;
-            display: flex !important;
-            flex-direction: column !important;
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 0 !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border-radius: 0 !important;
-            background: #0f172a !important;
-            box-sizing: border-box !important;
-            overflow: hidden !important;
-        }
-
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #interactiveCard .idle-layer {
-                display: none !important;
-            }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #callLayer,
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #endedLayer {
-            flex: 1 1 auto !important;
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            width: 100% !important;
-            height: 100% !important;
-            padding: 20px 16px !important;
-            background: #0f172a !important;
-            overflow: hidden !important;
-        }
-
-        body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #assistantTitlebar {
-            display: flex !important;
-            width: 100% !important;
-            height: 40px !important;
-            min-height: 40px !important;
-            flex-shrink: 0 !important;
-            background: #ffffff !important;
-        }
-
-            body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) #assistantTitlebar .assistant-title {
-                color: #000000 !important;
-            }
-
-    body[data-state="ended"] #callLayer {
-        display: none !important;
-    }
-
-    body:is([data-state="connecting"], [data-state="connected"]) #endedLayer {
-        display: none !important;
-    }
-
-    body:is([data-state="connecting"], [data-state="connected"], [data-state="ended"]) .app-wrapper > *:not(.app-header):not(#header):not(header):not(footer):not(#footer):not(.footer):not(#assistantTitlebar):not(#interactiveCard):not(.video-overlay) {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
     }
 
     @@media (min-width: 768px) {
@@ -1607,14 +1018,9 @@
 </style>
 
 <script>
-
     (function () {
-        if (document.body && !document.body.hasAttribute("data-state")) {
-            document.body.setAttribute("data-state", "idle");
-        }
         try { sessionStorage.removeItem("autoStartCall"); } catch (e) { }
     })();
-
 </script>
 
 <div class="app-wrapper">
@@ -1633,88 +1039,6 @@
 
     <input type="hidden" id="hdnTaskTypeId">
 
-    <div id="autoStartLoader">
-        <div class="spinner"></div>
-        <div class="lbl">Starting your assistant...</div>
-    </div>
-
-    <div id="interactiveCard">
-
-        <div class="idle-layer">
-            <div class="grace-idle">
-                <p class="grace-idle-desc">
-                    Click to Speak with Thara – <br />
-                    AI Video Assistant!
-                </p>
-
-                <button type="button"
-                        class="grace-idle-btn"
-                        id="idleBtn"
-                        aria-label="Chat now with Grace">
-                    <div class="grace-idle-avatar">
-                        <img src="~/images/avatar.png" alt="Grace avatar" width="154" height="154">
-                        <span class="grace-idle-pill">Talk to AI</span>
-                    </div>
-                </button>
-            </div>
-        </div>
-
-        <div class="call-layer" id="callLayer" data-status="dialing">
-            <div class="call-rings">
-                <div class="ring ring--1"></div>
-                <div class="ring ring--2"></div>
-                <div class="ring ring--3"></div>
-                <div class="call-dots">
-                    <span></span><span></span><span></span><span></span><span></span><span></span>
-                </div>
-                <div class="call-avatar">
-                    <img src="~/images/apollo-logo.png" alt="Apollo" class="call-avatar-icon" />
-                </div>
-            </div>
-            <h2 class="call-title" id="callTitle">Dial50 Demo Hospital</h2>
-            <div class="call-status-row">
-                <span class="status-dot"></span>
-                <span class="call-status-text" id="callStatus">Connecting voice / audio...</span>
-            </div>
-            <div class="call-controls">
-                <div class="control-btn-wrap">
-                    <button type="button" class="control-btn" id="micBtn" aria-label="Mute microphone">
-                        <img src="~/images/voice-agent/music.png" class="control-icon" alt="Mute microphone" />
-                    </button>
-                    <span class="control-label">Mute</span>
-                </div>
-                <div class="control-btn-wrap">
-                    <button type="button" class="control-btn speaker-btn" id="speakerBtn" aria-label="Speaker on">
-                        <img src="~/images/voice-agent/volume.png" class="control-icon" alt="Speaker" />
-                    </button>
-                    <span class="control-label">Speaker</span>
-                </div>
-            </div>
-            <button type="button" class="hangup-btn" id="endChatBtn" aria-label="End Call">
-                <img src="~/images/voice-agent/end-call.png" class="end-call-icon" alt="End Call" />
-            </button>
-        </div>
-
-        <div class="ended-layer" id="endedLayer">
-            <div class="ended-avatar-wrapper">
-                <div class="ended-avatar-container">
-                    <img src="~/images/apollo-logo.png" alt="Apollo" class="ended-avatar-icon-img" />
-                </div>
-            </div>
-            <h2 class="ended-hospital-name">Dial50 Demo Hospital</h2>
-            <div class="ended-status">
-                <span class="ended-status-dot"></span>
-                <span>Ended</span>
-            </div>
-            <div class="ended-bottom-controls">
-                <button type="button" class="ended-mic-btn" id="endedMicBtn" aria-label="Continue talking">
-                    <img src="~/images/voice-agent/music.png" alt="Microphone" />
-                </button>
-                <span class="continue-talking-text">Continue talking</span>
-            </div>
-        </div>
-    </div>
-
     <div class="content" id="pageContent"></div>
 
     <div class="chat-confirm-overlay" id="chatConfirmOverlay">
@@ -1722,8 +1046,8 @@
             <div class="chat-confirm-icon">
                 <i class="fa-solid fa-circle-play"></i>
             </div>
-            <h3>Video Assistant</h3>
-            <p>Would you like to continue with Thara, your AI Video Assistant?</p>
+            <h3>AI Assistant</h3>
+            <p>Would you like to continue with Thara, your AI Assistant?</p>
             <div class="chat-confirm-actions">
                 <button type="button" class="chat-confirm-cancel" onclick="closeChatConfirm()">Not now</button>
                 <button type="button" class="chat-confirm-ok" onclick="confirmGoToChat()">Continue</button>
@@ -1838,12 +1162,10 @@
 
         function isCallActive() {
             var state = document.body ? document.body.getAttribute('data-state') : null;
-            return state === 'connecting' || state === 'connected' || state === 'ended';
+            return state === 'connecting' || state === 'connected';
         }
 
         document.addEventListener("DOMContentLoaded", function () {
-            document.body.setAttribute("data-state", "idle");
-
             document.querySelectorAll(".navBtn").forEach(function (button) {
                 if (button.dataset.page === curpage) button.classList.add("active");
 
@@ -1852,68 +1174,32 @@
                 });
             });
 
-        var isUnifiedAIFrame = @(isUnifiedAIFrame ? "true" : "false");
+            var backBtn = document.getElementById('assistantBackBtn');
+            if (backBtn) {
+                backBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
 
-                    var backBtn = document.getElementById('assistantBackBtn');
-                    if (backBtn) {
-                        backBtn.addEventListener('click', function (e) {
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            if (isUnifiedAIFrame || window.UnifiedAIChild) {
-                                if (window.parent && window.parent !== window) {
-                                    window.parent.postMessage({ type: 'unified_ai_show_home' }, window.location.origin);
-                                } else {
-                                    BedContext.go('Home/Index');
-                                }
-                                return;
-                            }
-
-                            if (document.body.getAttribute('data-state') !== 'idle') {
-                                if (typeof window.endChat === 'function' && isCallActive()) {
-                                    window.endChat();
-                                }
-                                navigateToDailyCare();
-                                return;
-                            }
-
-                            pendingSuccessTaskId = null;
-                            _postCallFetchInFlight = true;
-                            hideRequestLoading();
+                    if (isUnifiedAIFrame || window.UnifiedAIChild) {
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({ type: 'unified_ai_show_home' }, window.location.origin);
+                        } else {
                             BedContext.go('Home/Index');
-                        });
+                        }
+                        return;
                     }
+
+                    pendingSuccessTaskId = null;
+                    _postCallFetchInFlight = true;
+                    hideRequestLoading();
+                    BedContext.go('Home/Index');
+                });
+            }
         });
 
         function navigateToDailyCare() {
-            if (window.UnifiedAIChild) {
-                window.BedContext.go('Home/Index');
-                return;
-            }
-            if (document.body.getAttribute('data-state') !== 'idle') {
-                if (typeof window.endChat === 'function' && isCallActive()) {
-                    window.endChat();
-                }
-                if (typeof window.setState === 'function') {
-                    window.setState('idle');
-                } else {
-                    document.body.setAttribute('data-state', 'idle');
-                }
-            }
             window.scrollTo(0, 0);
         }
-
-        // function DailCareRedirect(RedirectURL) {
-        //     var b = BedContext.get();
-        //     if (!b.bedInfo) return;
-        //     var url = RedirectURL + encodeURIComponent(b.bedInfo)
-        //         + '&region=' + encodeURIComponent(b.region || 'IN');
-        //     if (window.UnifiedAIChild) {
-        //         window.UnifiedAIChild.navigate(url);
-        //     } else {
-        //         window.location.href = url;
-        //     }
-        // }
 
         function DailCareRedirect(RedirectURL) {
             var b = BedContext.get();
@@ -2160,7 +1446,6 @@
         var successRequests = [];
         var successIndex = 0;
 
-        // Small JSON GET helper: never rejects, resolves null on failure
         function getJson(url, data) {
             return Promise.resolve($.ajax({
                 url: url,
@@ -2350,9 +1635,6 @@
             paintTaskRequest();
         }
 
-        // Fetch first, paint, then reveal (no "-" placeholder flash).
-        // The centered loading modal covers the whole fetch, then hides
-        // as soon as the success modal has been populated.
         function showSuccessModal(requestNo) {
             var overlay = document.getElementById('requestSuccessScreen');
             if (!overlay) return;
@@ -2419,7 +1701,6 @@
             });
         }
 
-
         function showRequestLoading() {
             var loadingScreen = document.getElementById("requestLoadingScreen");
 
@@ -2479,7 +1760,6 @@
             } catch (e) { }
         }
 
-        // Background poll: bails out immediately during calls / overlays / in-flight requests
         function pollForNewTask() {
             if (isCallActive()) return;
             var vOverlay = document.getElementById('videoOverlay');
@@ -2509,7 +1789,6 @@
             });
         }
 
-        // Pending popups from other pages + polling loop
         document.addEventListener("DOMContentLoaded", function () {
             loadLastSeenTaskId();
 
@@ -2673,12 +1952,24 @@
         window.goToRequestIndex = goToRequestIndex;
     </script>
 
-    @if (!isUnifiedAIFrame)
-    {
-        <script src="~/js/video-ai/video-script.js"></script>
-    }
     <script src="~/js/layout_DailyCare.js"></script>
     <script src="~/js/Dailycare.js"></script>
+    <script>
+        (function () {
+            function useSharedAssistant() {
+                window.confirmGoToChat = function () {
+                    if (typeof window.closeChatConfirm === "function") window.closeChatConfirm();
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({ type: "unified_ai_show_chat" }, window.location.origin);
+                    } else if (typeof window.openAI === "function") {
+                        window.openAI(true);
+                    }
+                };
+            }
+            useSharedAssistant();
+            window.addEventListener("load", useSharedAssistant);
+        })();
+    </script>
 
 </div>
 

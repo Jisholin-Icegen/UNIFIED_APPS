@@ -59,6 +59,49 @@ function updatePorterImages(trackData, status, statusId) {
     if (check) check.style.display = hasPorter ? '' : 'none';
 }
 
+function applyHeaderFromTrackData(trackData) {
+    if (!trackData || typeof trackData !== 'object') return;
+    window.trackData = trackData;
+
+    var title = trackData.headerTitle || trackData.HeaderTitle
+        || trackData.categoryName || trackData.CategoryName
+        || trackData.ordertype || trackData.ORDERTYPE
+        || trackData.mealtype || trackData.MealType || '';
+    var subtitle = trackData.headerSubtitle || trackData.HeaderSubtitle
+        || trackData.requestStatus || trackData.RequestStatus || trackData.status || '';
+    var reqNo = trackData.requestNo || trackData.RequestNo || '';
+
+    if (title) {
+        safeText('pageTitle', title);
+        safeText('headerTitle', title);
+    }
+    if (subtitle) {
+        safeText('pageSubtitle', subtitle);
+        safeText('headerSubtitle', subtitle);
+    }
+    if (reqNo) {
+        safeText('headerRequestNo', '#' + reqNo);
+    }
+}
+
+function safeCallMapImage(floorName) {
+    if (typeof window.applyMapImage === 'function') {
+        window.applyMapImage(floorName);
+    }
+}
+
+function safeCallPushPin(trackData) {
+    if (typeof window.pushTrackDataToPin === 'function') {
+        window.pushTrackDataToPin(trackData);
+    }
+}
+
+function safeCallFeedbackPrompt(isCompleted) {
+    if (typeof window.showFeedbackPrompt === 'function') {
+        window.showFeedbackPrompt(isCompleted);
+    }
+}
+
 function goBack() {
     BedContext.go('Home');
 }
@@ -373,7 +416,7 @@ function loadData(data) {
     safeText("roomNumber", roomNo);
     safeText("requestId", trackData.requestNo || trackData.RequestNo);
 
-    applyMapImage(trackData.floorName || trackData.FloorName);
+    safeCallMapImage(trackData.floorName || trackData.FloorName);
 
     safeText("arrival",
         trackData.etA_Display || trackData.ETA_Display ||
@@ -387,7 +430,8 @@ function loadData(data) {
     safeText("itemName", trackData.itemname || trackData.ITEMNAME);
     safeText("quantity", trackData.quantity || trackData.QUANTITY);
 
-    var mealRow = document.getElementById("mealType").closest('.info-row');
+    var mealEl = document.getElementById("mealType");
+    var mealRow = mealEl ? mealEl.closest('.info-row') : null;
     if (mealRow) mealRow.style.display = 'none';
     safeText("specialInstruction", trackData.specialinstruction || trackData.SPECIALINSTRUCTION);
 
@@ -396,10 +440,10 @@ function loadData(data) {
 
     updatePorterImages(trackData, status, statusId);
     applyHeaderFromTrackData(trackData);
-    pushTrackDataToPin(trackData);
+    safeCallPushPin(trackData);
 
     var isCompleted = statusId === "6" || status === "Completed" || status === "COMPLETED";
-    showFeedbackPrompt(isCompleted);
+    safeCallFeedbackPrompt(isCompleted);
 
     var ratingValue = trackData.rating || trackData.Rating;
     if (ratingValue && ratingValue != '0' && ratingValue != 0) {
@@ -429,7 +473,7 @@ function loadDataForOrderIds(data) {
     safeText("roomNumber", trackData.from);
     safeText("requestId", trackData.requestNo);
 
-    applyMapImage(trackData.floorName);
+    safeCallMapImage(trackData.floorName);
     safeText("arrival", trackData.etA_Display || trackData.eta);
     safeText("floor", trackData.floorName);
     safeText("zone", trackData.location || trackData.from);
@@ -439,7 +483,8 @@ function loadDataForOrderIds(data) {
     safeText("itemName", trackData.itemname);
     safeText("quantity", trackData.quantity);
 
-    var mealRow = document.getElementById("mealType").closest('.info-row');
+    var mealEl = document.getElementById("mealType");
+    var mealRow = mealEl ? mealEl.closest('.info-row') : null;
     if (mealRow) mealRow.style.display = 'flex';
     safeText("mealType", trackData.mealtype);
     safeText("specialInstruction", trackData.specialinstruction);
@@ -448,10 +493,10 @@ function loadDataForOrderIds(data) {
     var statusIdForImg = trackData.requestStatusId || "";
     updatePorterImages(trackData, statusForImg, statusIdForImg);
     applyHeaderFromTrackData(trackData);
-    pushTrackDataToPin(trackData);
+    safeCallPushPin(trackData);
 
     var isCompleted = statusForImg === "DELIVERED" || statusForImg === "Delivered" || statusIdForImg === "8";
-    showFeedbackPrompt(isCompleted);
+    safeCallFeedbackPrompt(isCompleted);
 
     var ratingValue = trackData.rating;
     if (ratingValue && ratingValue != '0' && ratingValue != 0) {

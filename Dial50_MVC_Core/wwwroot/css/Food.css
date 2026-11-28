@@ -1,4 +1,8 @@
-﻿.card-top-badges .prescribed-badge,
+﻿.meal-tab-box.is-live-now .not-now-text {
+    color: #059669;
+}
+
+.card-top-badges .prescribed-badge,
 .prescribed-badge {
     display: none !important;
     visibility: hidden !important;

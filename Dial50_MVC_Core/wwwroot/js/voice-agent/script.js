@@ -114,6 +114,7 @@ function initializeAvatarElements() {
     homeBtn = document.getElementById("homeBtn");
     assistantBackBtn = document.getElementById("assistantBackBtn");
     endedMicBtn = document.getElementById("endedMicBtn");
+    resetCallTimer();
 }
 
 function setState(state) {
@@ -136,8 +137,61 @@ function formatTime(s) {
 
 var elapsedSeconds = 0;
 
+function setSessionTimerVisibility(visible) {
+    if (!timerEl) timerEl = document.getElementById("sessionTimer");
+    if (!timerEl) return;
+    timerEl.hidden = !visible;
+    timerEl.style.display = visible ? "" : "none";
+}
+
+function resetCallTimer() {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+    elapsedSeconds = 0;
+    timeLeft = SESSION_SECONDS;
+    if (timerEl) timerEl.textContent = "";
+    setSessionTimerVisibility(false);
+}
+
 function renderTimer() {
-    if (timerEl) timerEl.textContent = formatTime(elapsedSeconds);
+    if (!timerEl) timerEl = document.getElementById("sessionTimer");
+    if (!timerEl) return;
+    var isConnected = !body || body.getAttribute("data-state") === "connected";
+    if (!isConnected || elapsedSeconds < 1) {
+        timerEl.textContent = "";
+        setSessionTimerVisibility(false);
+        return;
+    }
+    setSessionTimerVisibility(true);
+    timerEl.textContent = formatTime(elapsedSeconds);
+}
+
+function goConnected() {
+    resetCallTimer();
+    setState("connected");
+    setCallStatus("connecting");
+    clearTimeout(statusTransitionTimer);
+    statusTransitionTimer = setTimeout(function () {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        setCallStatus("connected");
+        if (!countdownTimer) startCountdown();
+        statusTransitionTimer = setTimeout(function () {
+            if (ws && ws.readyState === WebSocket.OPEN) setCallStatus("listening");
+        }, 700);
+    }, 700);
+}
+
+function startCountdown() {
+    clearInterval(countdownTimer);
+    renderTimer();
+    countdownTimer = setInterval(function () {
+        if (body && body.getAttribute("data-state") !== "connected") {
+            renderTimer();
+            return;
+        }
+        elapsedSeconds += 1;
+        renderTimer();
+    }, 1000);
 }
 
 async function fetchProfileLanguage(id) {
@@ -278,15 +332,64 @@ var userEndedCall = false;
 var callSessionActive = false;
 var callSessionGeneration = 0;
 var connectionInProgress = false;
-var reconnectAttempts = 0;
-var shortCloseStreak = 0;
-var MAX_SHORT_CLOSES = 3;
 var AUTH_CLOSE_CODES = [1008, 4001, 4003, 4401, 4403];
+var callHasConnected = false;
+var lastEndClickAt = 0;
+var END_CLICK_WINDOW_MS = 1500;
+var END_CONTROL_SELECTOR = "#endChatBtn, #unifiedAiBarEndButton, #unifiedAiBarChatButton, #assistantBackBtn";
+var AUTOMATIC_END_STATUSES = ["microphone-required", "connection-failed", "token-unavailable", "disconnected", "remote-ended"];
+var FAREWELL_WINDOW_MS = 60000;
+var FAREWELL_REGEX = /(^|[^\p{L}\p{M}])(bye|byee|bye-bye|goodbye|good\s+bye|alvida|अलविदा|बाय|பை\s+பை|பாய்|مع السلامة|وداعا)($|[^\p{L}\p{M}])/iu;
+var FAREWELL_REASON_REGEX = /bye|farewell|user[\s_-]*(ended|requested|hang)/i;
+var farewellHeardAt = { user: 0, assistant: 0 };
+var spokenText = { user: "", assistant: "" };
 
-var reconnectTimer = null;
+function resetFarewell() {
+    farewellHeardAt = { user: 0, assistant: 0 };
+    spokenText = { user: "", assistant: "" };
+}
+
+function trackFarewell(msg, kind) {
+    var text = [msg.text, msg.transcript, msg.delta, msg.content].find(function (value) {
+        return typeof value === "string";
+    }) || "";
+    var role = String(msg.role || msg.speaker || msg.source || "").toLowerCase();
+    if (role === "agent" || role === "ai" || role === "bot" || role === "model") role = "assistant";
+    if (role !== "user" && role !== "assistant") role = kind === "full" ? "user" : "assistant";
+
+    if (kind === "delta") {
+        spokenText[role] = (spokenText[role] + text).slice(-200);
+        text = spokenText[role];
+    } else {
+        text = text || spokenText[role];
+        spokenText[role] = "";
+    }
+    if (!text.trim()) return;
+
+    if (FAREWELL_REGEX.test(text)) {
+        farewellHeardAt[role] = Date.now();
+    } else if (kind !== "delta") {
+        farewellHeardAt[role] = 0;
+        if (role === "user") farewellHeardAt.assistant = 0;
+    }
+}
+
+function isGoodbyeEnding(reason) {
+    var now = Date.now();
+    return FAREWELL_REASON_REGEX.test(String(reason || ""))
+        || Object.keys(farewellHeardAt).some(function (role) {
+            return farewellHeardAt[role] > 0 && now - farewellHeardAt[role] < FAREWELL_WINDOW_MS;
+        });
+}
+
+window.addEventListener("click", function (event) {
+    if (event.isTrusted && event.target instanceof Element && event.target.closest(END_CONTROL_SELECTOR)) {
+        lastEndClickAt = Date.now();
+    }
+}, true);
+
 var connectionTimeoutTimer = null;
 var statusTransitionTimer = null;
-var stableResetTimer = null;
 var serverEndTimer = null;
 var queueFlushTimer = null;
 var heartbeatTimer = null;
@@ -650,6 +753,49 @@ function emitTranscript(msg, kind) {
     } catch (e) { }
 }
 
+var voiceTrace = [];
+
+function traceVoice(direction, type, size) {
+    voiceTrace.push({ t: new Date().toISOString().slice(11, 23), d: direction, type: type || "?", n: size || 0 });
+    if (voiceTrace.length > 25) voiceTrace.shift();
+}
+
+var VOICE_DEBUG_KEY = "dial50_voice_debug";
+
+function persistVoiceDebug(event, data) {
+    try {
+        var list = JSON.parse(localStorage.getItem(VOICE_DEBUG_KEY) || "[]");
+        list.push({ at: new Date().toISOString(), page: location.pathname, event: event, data: data || null });
+        while (list.length > 30) list.shift();
+        localStorage.setItem(VOICE_DEBUG_KEY, JSON.stringify(list));
+    } catch (e) { }
+}
+
+window.showVoiceDebug = function () {
+    try {
+        var list = JSON.parse(localStorage.getItem(VOICE_DEBUG_KEY) || "[]");
+        console.table(list.map(function (item) {
+            return { at: item.at, page: item.page, event: item.event, data: JSON.stringify(item.data) };
+        }));
+        return list;
+    } catch (e) { return []; }
+};
+
+window.clearVoiceDebug = function () {
+    try { localStorage.removeItem(VOICE_DEBUG_KEY); } catch (e) { }
+};
+
+window.addEventListener("pagehide", function () {
+    persistVoiceDebug("page-unload", { callSessionActive: callSessionActive, state: document.body ? document.body.getAttribute("data-state") : null });
+});
+
+(function () {
+    try {
+        var previous = JSON.parse(localStorage.getItem(VOICE_DEBUG_KEY) || "[]");
+        if (previous.length) console.warn("[voice-debug] events saved from earlier page loads (run showVoiceDebug() for a table):", previous.slice(-8));
+    } catch (e) { }
+})();
+
 function stopHeartbeat() {
     clearInterval(heartbeatTimer);
     heartbeatTimer = null;
@@ -694,6 +840,7 @@ function sendTextSafely(socket, message) {
 
     try {
         socket.send(encoded);
+        traceVoice("out", message && message.type, encoded.length);
         return true;
     } catch (error) {
         if (socket.readyState !== WebSocket.OPEN) return false;
@@ -738,10 +885,11 @@ async function connectToAvatarBackend() {
         }
 
         callSessionActive = true;
+        callHasConnected = false;
+        resetFarewell();
         callSessionGeneration += 1;
-        reconnectAttempts = 0;
-        shortCloseStreak = 0;
         timeLeft = SESSION_SECONDS;
+        resetCallTimer();
         userEndedCall = false;
         serverEnding = false;
 
@@ -758,15 +906,13 @@ async function connectToAvatarBackend() {
 
     connectionInProgress = true;
     serverEnding = false;
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
 
     try {
         await languageReady;
         if (!sessionIsCurrent()) return;
         await startMicrophone();
         if (!sessionIsCurrent()) return;
-        setCallStatus(reconnectAttempts > 0 ? "reconnecting" : "ringing");
+        setCallStatus("ringing");
 
         var token = await fetchToken();
         if (!sessionIsCurrent()) return;
@@ -784,6 +930,7 @@ async function connectToAvatarBackend() {
         socket.binaryType = "arraybuffer";
         ws = socket;
         var openedAt = 0;
+        var serverEndReason = "";
 
         clearTimeout(connectionTimeoutTimer);
         connectionTimeoutTimer = setTimeout(function () {
@@ -795,17 +942,10 @@ async function connectToAvatarBackend() {
         socket.onopen = function () {
             if (ws !== socket) return;
             openedAt = Date.now();
+            callHasConnected = true;
             clearTimeout(connectionTimeoutTimer);
             connectionTimeoutTimer = null;
             connectionInProgress = false;
-
-            clearTimeout(stableResetTimer);
-            stableResetTimer = setTimeout(function () {
-                if (ws === socket && socket.readyState === WebSocket.OPEN) {
-                    reconnectAttempts = 0;
-                    shortCloseStreak = 0;
-                }
-            }, 10000);
 
             goConnected();
             startHeartbeat(socket);
@@ -829,6 +969,7 @@ async function connectToAvatarBackend() {
             var msg;
             try { msg = JSON.parse(event.data); } catch (e) { return; }
             if (!msg || typeof msg !== "object") return;
+            traceVoice("in", msg.type, String(event.data).length);
 
             switch (msg.type) {
                 case "interrupt":
@@ -847,6 +988,7 @@ async function connectToAvatarBackend() {
                     break;
 
                 case "transcript":
+                    trackFarewell(msg, "full");
                     emitTranscript(msg, "full");
                     var cl = document.getElementById("callLayer");
                     if (cl && cl.getAttribute("data-status") !== "speaking") {
@@ -878,32 +1020,38 @@ async function connectToAvatarBackend() {
 
                 case "transcript_delta":
                 case "response.audio_transcript.delta":
+                    trackFarewell(msg, "delta");
                     emitTranscript(msg, "delta");
                     break;
 
                 case "transcript_done":
                 case "response.audio_transcript.done":
+                    trackFarewell(msg, "done");
                     emitTranscript(msg, "done");
                     break;
 
                 case "pong":
                 case "session.created":
                 case "session.updated":
+                case "session_started":
                     break;
 
                 case "call_ended": {
-                    serverEnding = true;
+                    serverEndReason = String(msg.reason || "");
+                    console.warn("[voice] server sent call_ended" + (serverEndReason ? ": " + serverEndReason : ""));
                     var remainingMs = audioContext
                         ? Math.max(0, (nextPlayTime - audioContext.currentTime) * 1000)
                         : 0;
                     clearTimeout(serverEndTimer);
                     serverEndTimer = setTimeout(function () {
-                        endChat("ended");
+                        if (ws !== socket || !callSessionActive) return;
+                        endChat(isGoodbyeEnding(serverEndReason) ? "remote-ended" : "disconnected");
                     }, remainingMs + 300);
                     break;
                 }
 
                 default:
+                    console.warn("[voice] unhandled server message:", String(event.data).slice(0, 500));
                     break;
             }
         };
@@ -916,12 +1064,21 @@ async function connectToAvatarBackend() {
                 + (event.reason ? ", reason: " + event.reason : "")
                 + ", clean: " + event.wasClean + ", alive " + Math.round(aliveMs / 1000) + " s");
 
-            clearTimeout(stableResetTimer);
+            console.warn("[voice] last messages before close:", JSON.stringify(voiceTrace.slice(-12)));
+            window.lastVoiceClose = {
+                code: event.code,
+                reason: event.reason,
+                clean: event.wasClean,
+                aliveSeconds: Math.round(aliveMs / 1000),
+                serverEndReason: serverEndReason,
+                trace: voiceTrace.slice()
+            };
+            persistVoiceDebug("socket-close", window.lastVoiceClose);
+
             clearTimeout(connectionTimeoutTimer);
             clearTimeout(statusTransitionTimer);
             clearTimeout(queueFlushTimer);
             stopHeartbeat();
-            stableResetTimer = null;
             connectionTimeoutTimer = null;
             statusTransitionTimer = null;
             queueFlushTimer = null;
@@ -930,22 +1087,20 @@ async function connectToAvatarBackend() {
 
             if (serverEnding || userEndedCall || !callSessionActive) return;
 
-            flushPlayback();
-            if (!openedAt || aliveMs < 5000) {
-                shortCloseStreak += 1;
-            } else {
-                shortCloseStreak = 0;
-            }
-
-            if (shortCloseStreak >= MAX_SHORT_CLOSES) {
-                var reasonStatus = AUTH_CLOSE_CODES.indexOf(event.code) !== -1
-                    ? "token-unavailable"
-                    : (!openedAt ? "connection-failed" : "disconnected");
-                endChat(reasonStatus);
+            if (isGoodbyeEnding(serverEndReason || event.reason)) {
+                endChat("remote-ended");
                 return;
             }
 
-            scheduleVoiceReconnect("socket-closed-" + event.code);
+            var reasonStatus = AUTH_CLOSE_CODES.indexOf(event.code) !== -1
+                ? "token-unavailable"
+                : (!openedAt ? "connection-failed" : "disconnected");
+            endChat(reasonStatus);
+
+            var closeStatusEl = document.getElementById("callStatus");
+            if (closeStatusEl) {
+                closeStatusEl.textContent += " (code " + event.code + ", " + Math.round(aliveMs / 1000) + "s)";
+            }
         };
 
         socket.onerror = function () {
@@ -964,63 +1119,13 @@ async function connectToAvatarBackend() {
             endChat("microphone-required");
             return;
         }
-        if (reconnectAttempts > 0 && reconnectAttempts < 5) {
-            scheduleVoiceReconnect(err && err.message ? err.message : "connect-error");
-            return;
-        }
         endChat("connection-failed");
     }
 }
 
 function scheduleVoiceReconnect(reason) {
-    if (!callSessionActive || userEndedCall || serverEnding) return;
-    if (reconnectTimer) return;
-
-    reconnectAttempts += 1;
-
-    var delayMs = reconnectAttempts === 1 ? 300 : Math.min(10000, 1000 * reconnectAttempts);
-
-    console.warn("Scheduling voice reconnect #" + reconnectAttempts + " in " + delayMs + " ms:", reason || "");
-
-    var currentState = body ? body.getAttribute("data-state") : null;
-    if (currentState !== "connected" && currentState !== "connecting") setState("connecting");
-    setCallStatus("reconnecting");
-    window.dispatchEvent(new CustomEvent("voice-agent:connection-state", {
-        detail: { connected: false, reconnecting: true }
-    }));
-
-    var sessionGen = callSessionGeneration;
-    reconnectTimer = setTimeout(function () {
-        reconnectTimer = null;
-        if (!callSessionActive || userEndedCall || serverEnding || sessionGen !== callSessionGeneration) return;
-        connectToAvatarBackend();
-    }, delayMs);
-}
-
-function goConnected() {
-    if (!countdownTimer) {
-        timeLeft = SESSION_SECONDS;
-        renderTimer();
-        startCountdown();
-    }
-    setState("connected");
-    setCallStatus("connecting");
-    clearTimeout(statusTransitionTimer);
-    statusTransitionTimer = setTimeout(function () {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        setCallStatus("connected");
-        statusTransitionTimer = setTimeout(function () {
-            if (ws && ws.readyState === WebSocket.OPEN) setCallStatus("listening");
-        }, 700);
-    }, 700);
-}
-
-function startCountdown() {
-    clearInterval(countdownTimer);
-    countdownTimer = setInterval(function () {
-        elapsedSeconds += 1;
-        renderTimer();
-    }, 1000);
+    console.warn("Voice call dropped, not reconnecting:", reason || "");
+    if (callSessionActive) endChat("disconnected");
 }
 
 function setCallStatus(status) {
@@ -1060,6 +1165,14 @@ function setCallStatus(status) {
 }
 
 function endChat(finalStatus) {
+    if (callSessionActive && AUTOMATIC_END_STATUSES.indexOf(finalStatus) === -1
+        && Date.now() - lastEndClickAt > END_CLICK_WINDOW_MS) {
+        console.warn("[voice] blocked a request to end the call without an End button click", new Error().stack);
+        return;
+    }
+    lastEndClickAt = 0;
+    persistVoiceDebug("endChat", { status: finalStatus || "ended", stack: String(new Error().stack || "").split("\n").slice(1, 7) });
+
     userEndedCall = true;
     serverEnding = false;
     callSessionActive = false;
@@ -1070,8 +1183,6 @@ function endChat(finalStatus) {
         window.UnifiedAIBridge.disconnect();
     }
 
-    reconnectAttempts = 0;
-    shortCloseStreak = 0;
     pendingVoiceMessages = [];
 
     releaseCallOwnership();
@@ -1079,17 +1190,14 @@ function endChat(finalStatus) {
 
     clearInterval(countdownTimer);
     countdownTimer = null;
+    resetCallTimer();
     clearTimeout(drainTimer);
-    clearTimeout(reconnectTimer);
     clearTimeout(connectionTimeoutTimer);
     clearTimeout(statusTransitionTimer);
-    clearTimeout(stableResetTimer);
     clearTimeout(serverEndTimer);
     clearTimeout(queueFlushTimer);
-    reconnectTimer = null;
     connectionTimeoutTimer = null;
     statusTransitionTimer = null;
-    stableResetTimer = null;
     serverEndTimer = null;
     queueFlushTimer = null;
 
@@ -1203,8 +1311,6 @@ function initializeAvatarEvents() {
             }
 
             callSessionActive = false;
-            reconnectAttempts = 0;
-            shortCloseStreak = 0;
             if (window.UnifiedAIHost && typeof window.UnifiedAIHost.showChat === "function") {
                 window.UnifiedAIHost.showChat();
             }
@@ -1258,6 +1364,9 @@ function queueVoiceAgentMessage(message) {
 }
 
 window.sendVoiceAgentMessage = function (message) {
+    if (message && message.type === "app_order_confirmed" && CFG.SEND_ORDER_CONFIRMED !== true) {
+        return false;
+    }
     if (!CFG.SEND_APP_MESSAGES && message
         && (message.type === "app_context" || message.type === "app_action_result")) {
         return false;
@@ -1295,4 +1404,3 @@ window.Dial50VAD = {
     reset: function () { localVad.reset(); },
     getState: function () { return { isSpeaking: localVad.isSpeaking, lastRms: localVad.lastRms, threshold: localVad.energyThreshold }; }
 };
-

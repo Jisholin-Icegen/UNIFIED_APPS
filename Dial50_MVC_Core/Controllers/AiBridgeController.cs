@@ -24,6 +24,7 @@ namespace Dial50_MVC_Core.Controllers
         private const int MaxFoods = 60;
         private const int DeviceReconnectWaitMs = 5000;
         private const int StepWaitMs = 5000;
+        private const int SuccessPopupMs = 2000;
         private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(10);
 
         private static readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> SendLocks = new();
@@ -574,6 +575,10 @@ namespace Dial50_MVC_Core.Controllers
 
                     if (!result.TryGetValue("ok", out var okValue) || okValue is not true)
                         break;
+
+                    var submitted = intent.Submit == true || intent.PlaceOrder == true || !string.IsNullOrWhiteSpace(intent.SubmitLabel);
+                    if (submitted && i < request.Intents.Count - 1)
+                        await DismissSuccessPopupAsync(session, intent.PlaceOrder == true, cancellationToken);
                 }
 
                 return new Dictionary<string, object>
@@ -951,6 +956,44 @@ namespace Dial50_MVC_Core.Controllers
                 ["elapsed_ms"] = swTotal.ElapsedMilliseconds,
                 ["executed"] = executed
             };
+        }
+
+        private async Task DismissSuccessPopupAsync(AiBridgeSession session, bool isOrder, CancellationToken cancellationToken)
+        {
+            var popup = await WaitForScreenValueAsync(
+                session,
+                s => FindDynamicRouteOrAction(s, "track status"),
+                isOrder ? 0 : StepWaitMs,
+                cancellationToken);
+
+            await Task.Delay(SuccessPopupMs, cancellationToken);
+            if (popup == null) return;
+
+            var timer = Stopwatch.StartNew();
+            while (FindDynamicRouteOrAction(_bridge.GetSnapshot(session).ScreenJson, "track status") != null
+                && timer.ElapsedMilliseconds < 1500)
+            {
+                await _bridge.WaitForScreenUpdateAsync(session, _bridge.GetScreenVersion(session), TimeSpan.FromMilliseconds(250), cancellationToken);
+            }
+
+            var screen = _bridge.GetSnapshot(session).ScreenJson;
+            if (FindDynamicRouteOrAction(screen, "track status") == null) return;
+
+            var close = FindDynamicCloseModalAction(screen);
+            if (close == null || string.IsNullOrEmpty(close.Value.TargetId)) return;
+
+            var prevVer = _bridge.GetScreenVersion(session);
+            await DispatchAndWaitAsync(
+                session,
+                new Dictionary<string, object>
+                {
+                    ["action"] = "ui.click",
+                    ["targetId"] = close.Value.TargetId,
+                    ["label"] = close.Value.Label
+                },
+                1500,
+                cancellationToken);
+            await _bridge.WaitForScreenUpdateAsync(session, prevVer, TimeSpan.FromMilliseconds(1500), cancellationToken);
         }
 
         private async Task<bool> OpenReviewScreenAsync(

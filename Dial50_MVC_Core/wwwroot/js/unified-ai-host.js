@@ -36,6 +36,13 @@
     const SCOPE_ATTRIBUTES = ["data-food-id", "data-category-id", "data-order-id", "data-notification-id", "data-question-id", "data-meal-type"];
     const CONTEXT_MIN_GAP_MS = 500;
     const NAVIGATION_TIMEOUT_MS = 8000;
+    const SUCCESS_POPUP_MS = 2000;
+    const SUCCESS_POPUP_POLL_MS = 200;
+    const AFTER_SUBMIT_REDIRECT_MS = 2000;
+    const AFTER_CALL_PAGES = { food: "FoodDining/MyOrders", request: "MyRequests" };
+    const FOOD_SUBMIT_REGEX = /\b(place|confirm|submit)\s*(my\s*|the\s*)?order\b/i;
+    const REQUEST_SUBMIT_REGEX = /\b(confirm|submit|send|raise)\s*(my\s*|the\s*)?request\b/i;
+    const POPUP_CONTROL_REGEX = /^(\u00D7|x|close|dismiss|track\s*status|next.*|.*previous)$/i;
 
     let frameReady = false;
     let pendingActions = [];
@@ -57,25 +64,24 @@
     let suppressEndedUntil = 0;
     let registry = {};
     let registryCount = 0;
+    let lastSubmission = null;
+    let lastSubmissionAt = 0;
+    let callWasLive = false;
+    const pendingSubmissions = new Map();
+    const successPopupSeen = new WeakMap();
     const originalCallLayerDisplay = callLayer ? callLayer.style.getPropertyValue("display") : "";
     const originalCallLayerDisplayPriority = callLayer ? callLayer.style.getPropertyPriority("display") : "";
 
-    // True when this document owns a real call screen (Home / Chat AI page).
-    // On other pages the footer injects hidden stand-ins inside #footerCallStateHooks.
     function isHomeHost() {
         return !!(callLayer && !callLayer.closest("#footerCallStateHooks")
             && !document.body.classList.contains("uai-non-home"));
     }
 
-    // Popup mode = FAB / non-home pages: the call is only ever shown as the floating bar.
     function isPopupMode() {
         return document.body.classList.contains("uai-non-home")
             || document.body.getAttribute("data-call-presentation") === "popup";
     }
 
-    // ---- Touch lock: while a real call is live and shown as the floating bar, the rest of the
-    // app cannot be touched. Only the bar and the suggestion chips stay clickable.
-    // Voice actions still work because they use programmatic click()/postMessage, which a shield ignores.
     const LOCK_Z = 2147483646;
     let touchShield = null;
 
@@ -293,7 +299,6 @@
     function setCallPresentation(presentation) {
         if (presentation !== "full" && presentation !== "minimized") return;
 
-        // Popup mode (FAB / non-home pages): while a call is live it always stays a floating bar
         if (isPopupMode() && isRealCallActive()) {
             callPresentation = "minimized";
             document.body.setAttribute("data-call-presentation", "popup");
@@ -673,7 +678,6 @@
         const realCall = state === "connecting" || state === "connected";
         const activeCall = simulatedSession || voiceNavSession || realCall;
 
-        // Popup mode: a live call is always shown as the floating bar
         if (realCall && isPopupMode() && callPresentation !== "minimized") {
             setCallPresentation("minimized");
         }
@@ -707,7 +711,6 @@
         if (state === "connected" && !simulatedSession) sendCurrentPageContext(false);
     }
 
-    // Internal: close the module iframe and restore the base presentation.
     function closeFrame() {
         frameLayer.classList.remove("is-open");
         frameLayer.setAttribute("aria-hidden", "true");
@@ -717,7 +720,6 @@
         notifyTestContextChanged();
     }
 
-    // Non-home page: the live call belongs to this document, so end it, go Home and auto-start there.
     function openChatScreen() {
         openingChat = true;
         if (typeof window.endChat === "function") window.endChat();
@@ -729,7 +731,6 @@
         else window.location.href = "/Home";
     }
 
-    // Public entry for the Chat button, the avatar/return button and the module's "show chat" message.
     function showChat() {
         if (frameLayer.classList.contains("is-open")) {
             closeFrame();
@@ -776,8 +777,106 @@
         }
     }
 
+    function markSubmission(kind) {
+        lastSubmission = kind;
+        lastSubmissionAt = Date.now();
+    }
+
+    function submissionKind(action) {
+        if (action.action === "food.submit_order") return "food";
+        if (action.action === "request.create") {
+            return /^food/i.test(String(action.module || "")) ? "food" : "request";
+        }
+        if (action.action !== "ui.click") return null;
+        const label = String(action.label || "");
+        const route = frameLayer.classList.contains("is-open") ? currentFramePath() : window.location.pathname;
+        if (FOOD_SUBMIT_REGEX.test(label)) return "food";
+        if (/\/fooddining\/revieworder/i.test(route) && /\b(place|confirm|submit|pay)\b/i.test(label)) return "food";
+        if (REQUEST_SUBMIT_REGEX.test(label)) return "request";
+        return null;
+    }
+
+    function successPopups() {
+        const found = [];
+        const documents = [document];
+        try {
+            if (frameLayer.classList.contains("is-open") && frame.contentDocument) documents.push(frame.contentDocument);
+        } catch (error) {
+            console.info("Module frame is not accessible:", error && error.message ? error.message : error);
+        }
+        documents.forEach(function (doc) {
+            const popup = doc.getElementById("requestSuccessScreen");
+            const view = doc.defaultView;
+            if (!popup || !view || !popup.getClientRects().length) return;
+            const style = view.getComputedStyle(popup);
+            if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0
+                || style.pointerEvents === "none") return;
+            found.push(popup);
+        });
+        return found;
+    }
+
+    function closeSuccessPopup(popup) {
+        const view = popup.ownerDocument.defaultView;
+        try {
+            if (view && typeof view.closeSuccessModal === "function") {
+                view.closeSuccessModal();
+                return;
+            }
+        } catch (error) {
+            console.warn("Could not close the success popup:", error);
+        }
+        const closeButton = popup.querySelector(".modal-close-btn");
+        if (closeButton) closeButton.click();
+    }
+
+    function watchSuccessPopups() {
+        if (!isCallActive()) return;
+        successPopups().forEach(function (popup) {
+            const seenAt = successPopupSeen.get(popup);
+            if (!seenAt) {
+                successPopupSeen.set(popup, Date.now());
+                const path = String(popup.ownerDocument.defaultView.location.pathname || "");
+                markSubmission(/\/fooddining(\/|$)/i.test(path) ? "food" : "request");
+                return;
+            }
+            if (Date.now() - seenAt < SUCCESS_POPUP_MS) return;
+            successPopupSeen.delete(popup);
+            closeSuccessPopup(popup);
+            sendCurrentPageContext(false);
+            notifyTestContextChanged();
+        });
+    }
+
+    function mustWaitForSuccessPopup(action) {
+        const name = action.action;
+        const leavesPage = name === "navigate" || name.indexOf("food.") === 0 || name.indexOf("request.") === 0
+            || name === "ui.click" && !POPUP_CONTROL_REGEX.test(String(action.label || "").trim());
+        return leavesPage && isCallActive() && successPopups().length > 0;
+    }
+
+    function redirectAfterCall() {
+        if (!lastSubmission) return false;
+        const page = AFTER_CALL_PAGES[lastSubmission];
+        const wait = Math.max(0, AFTER_SUBMIT_REDIRECT_MS - (Date.now() - lastSubmissionAt));
+        lastSubmission = null;
+        callWasLive = false;
+        leavingCallScreen = true;
+        pendingSubmissions.clear();
+        if (typeof window.setState === "function") window.setState("idle");
+        else document.body.setAttribute("data-state", "idle");
+        document.body.removeAttribute("data-call-presentation");
+        setTouchLock(false);
+        setTimeout(function () {
+            if (window.BedContext && typeof window.BedContext.go === "function") window.BedContext.go(page);
+            else window.location.assign("/" + page);
+        }, wait);
+        return true;
+    }
+
     function endOnCurrentScreen() {
         if (leavingCallScreen) return;
+        if (redirectAfterCall()) return;
         suppressEndedUntil = Date.now() + 4000;
         const stayUrl = currentFrameUrl();
         if (typeof window.setState === "function") window.setState("idle");
@@ -810,6 +909,11 @@
 
     function reportResult(action, success, result, error) {
         if (!action || !action.request_id) return;
+        const submitted = pendingSubmissions.get(action.request_id);
+        if (submitted) {
+            pendingSubmissions.delete(action.request_id);
+            if (success) markSubmission(submitted);
+        }
         const known = recentRequests.get(action.request_id);
         const response = {
             request_id: action.request_id,
@@ -1141,6 +1245,21 @@
     function handleAction(action) {
         if (!action || typeof action !== "object" || typeof action.action !== "string") return;
         if (isDuplicateRequest(action)) return;
+        runAction(action);
+    }
+
+    function runAction(action, waitedMs) {
+        const waited = waitedMs || 0;
+        if (waited < SUCCESS_POPUP_MS * 3 && mustWaitForSuccessPopup(action)) {
+            setTimeout(function () { runAction(action, waited + SUCCESS_POPUP_POLL_MS); }, SUCCESS_POPUP_POLL_MS);
+            return;
+        }
+
+        const kind = submissionKind(action);
+        if (kind) {
+            if (action.request_id) pendingSubmissions.set(action.request_id, kind);
+            else markSubmission(kind);
+        }
 
         if (action.action === "video.play" || action.action === "video.stop") {
             dispatchToModule("video_request", action);
@@ -1279,6 +1398,7 @@
     });
 
     window.addEventListener("unified-ai:order-confirmed", function (event) {
+        if (isCallActive()) markSubmission("food");
         if (!isVoiceConnected()) return;
         window.sendVoiceAgentMessage({ type: "app_order_confirmed", confirmation: event.detail || {} });
     });
@@ -1535,10 +1655,20 @@
         navigator.serviceWorker.addEventListener("message", function (event) {
             const data = event.data || {};
             if (data.type !== "push-open" || !data.url) return;
+            let resolvedUrl = data.url;
+            try {
+                const parsed = new URL(data.url, window.location.origin);
+                if (normalizeAppOrigin(parsed)) {
+                    withContext(parsed);
+                    parsed.searchParams.delete("Unified");
+                    parsed.searchParams.delete("UnifiedAI");
+                    resolvedUrl = parsed.toString();
+                }
+            } catch (e) { }
             if (isCallActive()) {
-                if (!openAppUrl(data.url, null)) console.warn("Notification target is not a valid same-site route:", data.url);
+                if (!openAppUrl(resolvedUrl, null)) console.warn("Notification target is not a valid same-site route:", resolvedUrl);
             } else {
-                window.location.href = data.url;
+                window.location.href = resolvedUrl;
             }
         });
     }
@@ -1560,6 +1690,31 @@
             if (openAppUrl(destination.toString(), null)) event.preventDefault();
         });
     }
+
+    window.addEventListener("submit", function (event) {
+        const form = event.target;
+        if (!isRealCallActive() || event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
+        const submitter = event.submitter;
+        const method = String(submitter && submitter.getAttribute("formmethod") || form.getAttribute("method") || "get");
+        if (method.toLowerCase() === "dialog" || form.getAttribute("target")
+            || submitter && submitter.getAttribute("formtarget")) return;
+        const targetUrl = new URL(submitter && submitter.getAttribute("formaction")
+            || form.getAttribute("action") || window.location.href, window.location.href);
+        if (!normalizeAppOrigin(targetUrl) || BLOCKED_ROUTE_REGEX.test(targetUrl.pathname)) return;
+
+        frame.name = frame.id;
+        if (frame.contentWindow) frame.contentWindow.name = frame.id;
+        form.target = frame.id;
+        latestFrameContext = null;
+        lastSentContext = "";
+        activeTarget = routeTargetForPath(targetUrl.pathname);
+        frameReady = false;
+        frameLayer.classList.add("is-open");
+        frameLayer.setAttribute("aria-hidden", "false");
+        setCallPresentation("minimized");
+        updateFloatingBar();
+        notifyTestContextChanged();
+    });
 
     window.addEventListener("beforeunload", function (event) {
         if (!isRealCallActive()) return;
@@ -1611,13 +1766,24 @@
 
     const bodyObserver = new MutationObserver(function () {
         const state = document.body.getAttribute("data-state");
-        if (state === "connecting" || state === "connected") {
+        const live = state === "connecting" || state === "connected";
+        if (live && !callWasLive) {
+            lastSubmission = null;
+            pendingSubmissions.clear();
+        }
+        if (!live && callWasLive) {
+            callWasLive = false;
+            if (!openingChat && redirectAfterCall()) return;
+        }
+        if (live) {
+            callWasLive = true;
             simulatedSession = false;
             openingChat = false;
             leavingCallScreen = false;
             suppressEndedUntil = 0;
             if (voiceNavSession) endVoiceNavSession();
         } else if (state === "ended") {
+            if (leavingCallScreen) return;
             if (!openingChat && !isOnCallScreen()) {
                 endOnCurrentScreen();
                 return;
@@ -1646,7 +1812,9 @@
             attributeFilter: ["class"]
         });
     }
+    callWasLive = isRealCallActive();
     updateFloatingBar();
+    setInterval(watchSuccessPopups, SUCCESS_POPUP_POLL_MS);
 
     if (window.BedContext && typeof window.BedContext.go === "function") {
         const originalGo = window.BedContext.go.bind(window.BedContext);
@@ -1674,12 +1842,13 @@
 
         const barTimerEl = document.getElementById("unifiedAiBarTimer");
         const callTimerEl = document.getElementById("sessionTimer");
-        const COLLAPSE_DELAY_MS = 15000;
+        const COLLAPSE_DELAY_MS = 10000;
         const VIEWPORT_PAD = 12;
 
         let collapseTimer = null;
         let timerInterval = null;
         let elapsedSeconds = 0;
+        let wasConnected = false;
         let wasHidden = bar.hidden;
 
         function isCallScreenVisible() {
@@ -1815,6 +1984,43 @@
             resetCollapseTimer();
         }
 
+        function syncSpeakingState() {
+            if (!bar) return;
+            const state = document.body.getAttribute("data-state");
+            const callLayerEl = document.getElementById("callLayer");
+            const layerStatus = String((callLayerEl && callLayerEl.getAttribute("data-status")) || "").toLowerCase();
+            const statusText = String((document.getElementById("unifiedAiBarStatus") && document.getElementById("unifiedAiBarStatus").textContent)
+                || (document.getElementById("callStatus") && document.getElementById("callStatus").textContent)
+                || "").toLowerCase();
+            const micEl = document.getElementById("micBtn");
+            const isMuted = !!(micEl && micEl.classList.contains("muted"))
+                || !!(barMicButton && barMicButton.classList.contains("is-muted"));
+
+            const isActive = !bar.hidden && state === "connected";
+            const isSpeaking = isActive
+                && (document.body.classList.contains("uai-speaking")
+                    || document.body.getAttribute("data-speaking") === "true"
+                    || layerStatus === "speaking"
+                    || /\bspeaking\b/.test(statusText));
+
+            const vadSpeaking = !!(window.Dial50VAD && typeof window.Dial50VAD.getState === "function"
+                && window.Dial50VAD.getState().isSpeaking);
+            const isListening = isActive
+                && !isSpeaking
+                && !isMuted
+                && (layerStatus === "listening" || /\blistening\b/.test(statusText));
+            const isUserSpeaking = isActive
+                && !isSpeaking
+                && !isMuted
+                && (vadSpeaking || document.body.classList.contains("uai-user-speaking"));
+
+            bar.classList.toggle("is-speaking", isSpeaking);
+            bar.classList.toggle("is-listening", isListening || isUserSpeaking);
+            bar.classList.toggle("is-user-speaking", isUserSpeaking);
+        }
+
+        setInterval(syncSpeakingState, 200);
+
         function resetCollapseTimer() {
             clearTimeout(collapseTimer);
             if (!bar.hidden && !bar.classList.contains("is-minimized") && !isCallScreenVisible() && !bar.classList.contains("is-dragging")) {
@@ -1828,25 +2034,83 @@
             return String(mins).padStart(2, "0") + ":" + String(secs).padStart(2, "0");
         }
 
+        function parseCallTimerSeconds() {
+            if (!callTimerEl) return null;
+            const raw = String(callTimerEl.textContent || "").trim();
+            const m = raw.match(/^(\d{1,2}):(\d{2})$/);
+            if (!m) return null;
+            const sec = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+            return Number.isFinite(sec) ? sec : null;
+        }
+
         function syncTimerDisplay() {
             if (!barTimerEl) return;
-            if (callTimerEl && callTimerEl.textContent && callTimerEl.textContent.trim() !== "00:00") {
-                barTimerEl.textContent = callTimerEl.textContent.trim();
+            const state = document.body.getAttribute("data-state");
+            if (state !== "connected") {
+                barTimerEl.textContent = "";
+                barTimerEl.hidden = true;
                 return;
             }
+
+            const callSec = parseCallTimerSeconds();
+            if (callSec !== null && callSec >= 1 && callSec <= elapsedSeconds + 2) {
+                elapsedSeconds = Math.max(elapsedSeconds, callSec);
+            }
+
+            if (elapsedSeconds < 1) {
+                barTimerEl.textContent = "";
+                barTimerEl.hidden = true;
+                return;
+            }
+
+            const prevRect = bar.getBoundingClientRect();
+            const prevCenterX = prevRect.left + prevRect.width / 2;
+            const wasHiddenBadge = barTimerEl.hidden;
+
             barTimerEl.textContent = formatDuration(elapsedSeconds);
+            barTimerEl.hidden = false;
+
+            if (wasHiddenBadge && !bar.classList.contains("is-minimized") && !bar.classList.contains("is-dragging")) {
+                requestAnimationFrame(() => {
+                    const nextRect = bar.getBoundingClientRect();
+                    const deltaX = prevCenterX - (nextRect.left + nextRect.width / 2);
+                    if (Math.abs(deltaX) > 0.5) {
+                        const currentLeft = parseFloat(bar.style.left);
+                        if (Number.isFinite(currentLeft)) {
+                            const clamped = clampBarCoords(
+                                currentLeft + deltaX,
+                                parseFloat(bar.style.top) || nextRect.top,
+                                nextRect.width,
+                                nextRect.height
+                            );
+                            bar.style.left = clamped.left + "px";
+                            bar.style.top = clamped.top + "px";
+                            bar.style.right = "auto";
+                            bar.style.transform = "none";
+                        }
+                    }
+                });
+            }
         }
 
         function startBarTimer() {
             if (!barTimerEl) return;
-            barTimerEl.hidden = false;
+            const state = document.body.getAttribute("data-state");
+            if (state !== "connected") {
+                stopBarTimer();
+                return;
+            }
+            if (!wasConnected) {
+                elapsedSeconds = 0;
+                wasConnected = true;
+            }
             syncTimerDisplay();
             if (timerInterval) return;
 
             timerInterval = setInterval(() => {
-                const state = document.body.getAttribute("data-state");
-                if (state !== "connecting" && state !== "connected") {
-                    stopBarTimer(state === "ended");
+                const currentState = document.body.getAttribute("data-state");
+                if (currentState !== "connected") {
+                    stopBarTimer();
                     return;
                 }
                 elapsedSeconds++;
@@ -1854,31 +2118,27 @@
             }, 1000);
         }
 
-        function stopBarTimer(keepVisible) {
+        function stopBarTimer() {
             if (timerInterval) {
                 clearInterval(timerInterval);
                 timerInterval = null;
             }
-            if (!barTimerEl) return;
-            if (!keepVisible) {
-                elapsedSeconds = 0;
-                barTimerEl.textContent = "00:00";
+            elapsedSeconds = 0;
+            wasConnected = false;
+            if (barTimerEl) {
+                barTimerEl.textContent = "";
                 barTimerEl.hidden = true;
-            } else {
-                barTimerEl.hidden = false;
-                syncTimerDisplay();
             }
         }
 
         function evaluateTimerState() {
             const state = document.body.getAttribute("data-state");
-            if (state === "connecting" || state === "connected") {
+            if (state === "connected") {
                 startBarTimer();
-            } else if (state === "ended") {
-                stopBarTimer(true);
             } else {
-                stopBarTimer(false);
+                stopBarTimer();
             }
+            syncSpeakingState();
             resetCollapseTimer();
         }
 

@@ -183,9 +183,6 @@
         display: none !important;
     }
 
-    /* Call popup mode (FAB / non-home pages): the full call screen is never shown,
-               only the floating bar styled by unified-ai.css. The module layer is NOT hidden
-               so in-call navigation through the iframe keeps working. */
     body[data-call-presentation="popup"] #callLayer,
     body[data-call-presentation="popup"] #endedLayer,
     body.uai-non-home #callLayer,
@@ -288,7 +285,6 @@
             document.body.appendChild(bar);
         }
 
-        // Hidden stand-ins for the Home call screen elements that script.js looks up by id
         if (!document.getElementById("callLayer")) {
             var hooks = document.createElement("div");
             hooks.id = "footerCallStateHooks";
@@ -329,6 +325,92 @@
         }
     })();
 
+    (function guardCallSockets() {
+        if (IN_UNIFIED_FRAME || window.__uaiSocketGuard || !window.WebSocket || !document.body) return;
+        window.__uaiSocketGuard = true;
+
+        var NativeSocket = window.WebSocket;
+        var bridgeSockets = [];
+        var wasLive = isLive();
+
+        function isLive() {
+            var state = document.body.getAttribute("data-state");
+            return state === "connecting" || state === "connected";
+        }
+
+        function readFlag(key) {
+            try { return sessionStorage.getItem(key); } catch (e) { return null; }
+        }
+
+        function writeFlag(key, value) {
+            try {
+                if (value === null) sessionStorage.removeItem(key);
+                else sessionStorage.setItem(key, value);
+            } catch (e) { }
+        }
+
+        function recordDrop(reason) {
+            var entry = new Date().toISOString() + " | " + window.location.pathname + " | " + reason;
+            writeFlag("uaiLastDrop", entry);
+            console.warn("[voice] " + entry);
+        }
+
+        function closedSocket(url) {
+            var socket = new EventTarget();
+            socket.url = String(url);
+            socket.readyState = 3;
+            socket.bufferedAmount = 0;
+            socket.send = function () { };
+            socket.close = function () { };
+            setTimeout(function () {
+                var event = new CloseEvent("close", { code: 1000, reason: "No active call", wasClean: true });
+                if (typeof socket.onclose === "function") socket.onclose(event);
+                socket.dispatchEvent(event);
+            }, 0);
+            return socket;
+        }
+
+        function GuardedSocket(url, protocols) {
+            var isBridge = /\/api\/ai-bridge\//i.test(String(url));
+            if (isBridge && !isLive() && readFlag("uaiCallEnded") === "1") return closedSocket(url);
+
+            var socket = protocols === undefined ? new NativeSocket(url) : new NativeSocket(url, protocols);
+            if (isBridge) {
+                bridgeSockets.push(socket);
+                socket.addEventListener("close", function () {
+                    var index = bridgeSockets.indexOf(socket);
+                    if (index !== -1) bridgeSockets.splice(index, 1);
+                });
+            } else {
+                socket.addEventListener("close", function (event) {
+                    recordDrop("socket " + String(url).split("?")[0] + " closed, code " + event.code
+                        + (event.reason ? ", reason " + event.reason : "") + ", state " + document.body.getAttribute("data-state"));
+                });
+            }
+            return socket;
+        }
+
+        GuardedSocket.prototype = NativeSocket.prototype;
+        ["CONNECTING", "OPEN", "CLOSING", "CLOSED"].forEach(function (name, index) { GuardedSocket[name] = index; });
+        window.WebSocket = GuardedSocket;
+
+        var lastDrop = readFlag("uaiLastDrop");
+        if (lastDrop) console.info("[voice] previous call event: " + lastDrop);
+        if (wasLive) writeFlag("uaiCallEnded", null);
+
+        new MutationObserver(function () {
+            var live = isLive();
+            if (live === wasLive) return;
+            wasLive = live;
+            writeFlag("uaiCallEnded", live ? null : "1");
+            if (!live) bridgeSockets.slice().forEach(function (socket) { socket.close(1000, "Call ended"); });
+        }).observe(document.body, { attributes: true, attributeFilter: ["data-state"] });
+
+        window.addEventListener("pagehide", function () {
+            if (isLive()) recordDrop("page was left or reloaded during the call");
+        });
+    })();
+
     function keepIdleLook(rules) {
         Array.prototype.forEach.call(rules || [], function (rule) {
             if (rule.styleSheet) {
@@ -364,10 +446,9 @@
         if (event.target && event.target.tagName === "LINK") keepPageLookDuringCall();
     }, true);
 
-    /* ---------- Lazy-load the voice stack on pages that don't include it ---------- */
     var UAI_SCRIPTS = {
-        voice:  "@Url.Content("~/js/voice-agent/script.js")?v=1",
-        host:   "@Url.Content("~/js/unified-ai-host.js")?v=7",
+        voice:  "@Url.Content("~/js/voice-agent/script.js")?v=3",
+        host:   "@Url.Content("~/js/unified-ai-host.js")?v=9",
         bridge: "@Url.Content("~/js/unified-ai-bridge.js")?v=1"
     };
     var _uaiLoads = {};
@@ -388,7 +469,6 @@
 
     function ensureVoiceStack() {
         if (_uaiStackPromise) return _uaiStackPromise;
-        // Order matters: voice-agent -> host -> bridge (bridge listens to the host/voice events)
         _uaiStackPromise = loadScriptOnce("voice", function () { return typeof window.connectToAvatarBackend === "function"; })
             .then(function () { return loadScriptOnce("host", function () { return !!window.UnifiedAIHost; }); })
             .then(function () { return loadScriptOnce("bridge", function () { return !!window.UnifiedAIBridge; }); })
@@ -443,11 +523,11 @@
         }
 
         ensureVoiceStack().then(function () {
-            // Non-home pages never show the full call screen, only the popup bar
             if (!IS_HOME_HOST) document.body.setAttribute("data-call-presentation", "popup");
 
             var state = document.body.getAttribute("data-state");
-            if (state !== "connecting" && state !== "connected") {
+            var startingCall = state !== "connecting" && state !== "connected";
+            if (startingCall) {
                 if (typeof window.setState === "function") window.setState("connecting");
                 else document.body.setAttribute("data-state", "connecting");
 
@@ -455,16 +535,25 @@
                 window.connectToAvatarBackend();
             }
 
-            // Show the call as the floating bar (on Home this minimizes the full call screen)
             if (window.UnifiedAIHost && typeof window.UnifiedAIHost.minimizeCall === "function") {
                 window.UnifiedAIHost.minimizeCall();
             }
 
             var bar = document.getElementById("unifiedAiFloatingBar");
             if (bar) bar.hidden = false;
+
+            if (startingCall) openFoodOrderingForCall();
         }).catch(function (err) {
             console.error("[voice] could not start assistant:", err);
         });
+    }
+
+    function openFoodOrderingForCall() {
+        var path = (window.location.pathname || "").toLowerCase().replace(/\/+$/, "");
+        if (!/\/fooddining(\/|$)/.test(path) || /\/fooddining\/foodordering$/.test(path)) return;
+        if (window.UnifiedAIHost && typeof window.UnifiedAIHost.openModule === "function") {
+            window.UnifiedAIHost.openModule("food_order");
+        }
     }
 
     function Home() {
