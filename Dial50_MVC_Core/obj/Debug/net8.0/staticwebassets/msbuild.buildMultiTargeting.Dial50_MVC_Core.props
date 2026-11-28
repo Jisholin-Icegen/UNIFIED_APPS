@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\build\Dial50_MVC_Core.props" />
-</Project>
